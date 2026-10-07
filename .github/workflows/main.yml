@@ -38,34 +38,19 @@ jobs:
             --name ugphone-container \
             budtmo/docker-android:emulator_9.0
 
-          # Cai dat cong cu va thiet lap Openbox auto-maximize
+          # Cai dat cong cu va cau hinh Openbox auto-maximize
           echo "Dang cau hinh Openbox tu dong phong to cua so..."
           docker exec -u 0 ugphone-container bash -c '
             apt-get update -qq && apt-get install -y -qq wmctrl xdotool || true
             mkdir -p /home/androidusr/.config/openbox
-            if [ -f /etc/xdg/openbox/rc.xml ]; then
-              cp /etc/xdg/openbox/rc.xml /home/androidusr/.config/openbox/rc.xml
-              sed -i "s|<applications>|<applications><application class=\"*\" name=\"*\" title=\"*\"><maximized>yes</maximized></application>|g" /home/androidusr/.config/openbox/rc.xml || true
-              sed -i "s|<applications>|<applications><application class=\"*\" name=\"*\" title=\"*\"><maximized>yes</maximized></application>|g" /etc/xdg/openbox/rc.xml || true
-            else
-              cat << "EOF" > /home/androidusr/.config/openbox/rc.xml
-<?xml version="1.0" encoding="UTF-8"?>
-<openbox_config xmlns="http://openbox.org/3.4/rc">
-  <applications>
-    <application class="*" name="*" title="*">
-      <maximized>yes</maximized>
-    </application>
-  </applications>
-</openbox_config>
-EOF
-            fi
+            echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?><openbox_config xmlns=\"http://openbox.org/3.4/rc\"><applications><application class=\"*\" name=\"*\" title=\"*\"><maximized>yes</maximized></application></applications></openbox_config>" > /home/androidusr/.config/openbox/rc.xml
             chown -R androidusr:androidusr /home/androidusr/.config
             su - androidusr -c "DISPLAY=:0 xhost +" 2>/dev/null || true
             xhost + 2>/dev/null || true
             su - androidusr -c "DISPLAY=:0 openbox --reconfigure" 2>/dev/null || true
           ' || true
 
-      - name: 3. Tao Link 1-Click, Phong to man hinh & Gui DM
+      - name: 3. Tao Link 1-Click, Phong to toan man hinh & Gui DM
         run: |
           curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
           chmod +x cloudflared
@@ -162,7 +147,6 @@ EOF
         run: |
           echo "Cloud Phone dang hoat dong on dinh..."
           for i in {1..360}; do
-            # Dinh ky kiem tra va giu cua so luon phong to
             if [ $((i % 5)) -eq 0 ]; then
               docker exec ugphone-container bash -c '
                 export DISPLAY=:0
