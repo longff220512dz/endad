@@ -70,71 +70,46 @@ jobs:
           echo "$FULL_URL"
           echo "================================================================================"
 
-          export TUNNEL_URL="$TUNNEL_URL"
-          export USER_ID="${{ github.event.inputs.user_id }}"
-          export BOT_TOKEN="${{ github.event.inputs.bot_token }}"
+          USER_ID="${{ github.event.inputs.user_id }}"
+          BOT_TOKEN="${{ github.event.inputs.bot_token }}"
 
-          python3 - << 'EOF'
-import os
-import requests
+          if [ -n "$USER_ID" ] && [ -n "$BOT_TOKEN" ]; then
+            echo "Dang gui link vao DM cho $USER_ID..."
+            DM_RESP=$(curl -s -X POST "https://discord.com/api/v10/users/@me/channels" \
+              -H "Authorization: Bot $BOT_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"recipient_id\":\"$USER_ID\"}")
+            DM_CHANNEL=$(echo "$DM_RESP" | jq -r '.id // empty')
 
-user_id = os.environ.get("USER_ID", "").strip()
-bot_token = os.environ.get("BOT_TOKEN", "").strip()
-tunnel_url = os.environ.get("TUNNEL_URL", "").strip()
-
-if user_id and bot_token and tunnel_url:
-    full_url = f"{tunnel_url}/vnc.html?autoconnect=true&resize=scale"
-    headers = {
-        "Authorization": f"Bot {bot_token}",
-        "Content-Type": "application/json",
-        "User-Agent": "ZetStoreBot"
-    }
-    try:
-        dm_res = requests.post(
-            "https://discord.com/api/v10/users/@me/channels",
-            headers=headers,
-            json={"recipient_id": user_id},
-            timeout=10
-        )
-        if dm_res.status_code in [200, 201]:
-            dm_channel_id = dm_res.json().get("id")
-            msg = {
-                "embeds": [{
-                    "title": "🎉 CLOUD PHONE CỦA BẠN ĐÃ SẴN SÀNG!",
-                    "description": (
-                        f"Xin chào <@{user_id}>!\n\n"
-                        f"Máy ảo **Android Cloud Phone** của bạn đã khởi động hoàn tất và kết nối mạng thành công!\n\n"
-                        f"📱 **Thiết bị:** Android 9.0 (Nexus 5)\n"
-                        f"⚡ **Tốc độ:** 60 FPS • Ping thấp\n"
-                        f"🌐 **Trạng thái:** Đang hoạt động trực tuyến\n\n"
-                        f"👉 **Link truy cập 1-Click:**\n{full_url}\n\n"
-                        f"*(Nhấn vào nút xanh bên dưới để vào ngay màn hình máy ảo trên trình duyệt web của bạn)*"
-                    ),
-                    "color": 65280,
-                    "footer": {"text": "Zet Store • Cloud Phone System"}
-                }],
-                "components": [{
-                    "type": 1,
-                    "components": [{
-                        "type": 2,
-                        "style": 5,
-                        "label": "🚀 Mở Màn Hình Cloud Phone",
-                        "url": full_url
+            if [ -n "$DM_CHANNEL" ] && [ "$DM_CHANNEL" != "null" ]; then
+              PAYLOAD=$(jq -n \
+                --arg url "$FULL_URL" \
+                --arg uid "$USER_ID" \
+                '{
+                  embeds: [{
+                    title: "🎉 CLOUD PHONE CỦA BẠN ĐÃ SẴN SÀNG!",
+                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Android Cloud Phone** của bạn đã khởi động thành công!\n\n📱 **Thiết bị:** Android 9.0 (Nexus 5)\n⚡ **Tốc độ:** 60 FPS • Ping thấp\n🌐 **Trạng thái:** Đang hoạt động trực tuyến\n\n👉 **Link truy cập 1-Click:**\n" + $url + "\n\n*(Nhấn vào nút bên dưới để mở ngay màn hình máy ảo trên trình duyệt web)*"),
+                    color: 65280,
+                    footer: { text: "Zet Store • Cloud Phone System" }
+                  }],
+                  components: [{
+                    type: 1,
+                    components: [{
+                      type: 2,
+                      style: 5,
+                      label: "🚀 Mở Màn Hình Cloud Phone Ngay",
+                      url: $url
                     }]
-                }]
-            }
-            send_res = requests.post(
-                f"https://discord.com/api/v10/channels/{dm_channel_id}/messages",
-                headers=headers,
-                json=msg,
-                timeout=10
-            )
-            print(f"Ket qua gui DM: {send_res.status_code}")
-        else:
-            print(f"Loi tao DM channel: {dm_res.status_code} {dm_res.text}")
-    except Exception as e:
-        print(f"Loi ngoai le khi gui DM: {e}")
-EOF
+                  }]
+                }')
+
+              curl -s -X POST "https://discord.com/api/v10/channels/$DM_CHANNEL/messages" \
+                -H "Authorization: Bot $BOT_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "$PAYLOAD"
+              echo "Da gui link thanh cong vao DMs!"
+            fi
+          fi
 
       - name: 4. Duy tri may treo game
         run: |
