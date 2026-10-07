@@ -1,4 +1,4 @@
-name: All-In-One UgPhone Cloud (Direct Link)
+name: All-In-One UgPhone Cloud (Landscape Gaming)
 on:
   workflow_dispatch:
 
@@ -11,45 +11,50 @@ jobs:
           sudo chmod 777 /dev/kvm || true
           ls -l /dev/kvm
 
-      - name: 2. Khoi dong Android toi uu
+      - name: 2. Khoi dong Cloud Phone Chuan Game Man Hinh Ngang
         run: |
-          echo "Khoi dong Cloud Phone..."
+          echo "Khoi dong Cloud Phone Man Hinh Ngang..."
+          # Dat do phan giai 1280x720 (Chuan Game 16:9, vua khit man hinh may tinh va dien thoai xoay ngang)
           docker run -d \
             -p 6080:6080 \
             -p 5555:5555 \
-            -e EMULATOR_DEVICE="Nexus 5" \
+            -e EMULATOR_DEVICE="Nexus 7" \
             -e EMULATOR_NO_SKIN=true \
             -e WEB_VNC=true \
-            -e SCREEN_WIDTH=720 \
-            -e SCREEN_HEIGHT=1280 \
+            -e SCREEN_WIDTH=1280 \
+            -e SCREEN_HEIGHT=720 \
             -e EMULATOR_ADDITIONAL_ARGS="-no-audio -no-boot-anim" \
             --device /dev/kvm \
             --name ugphone-container \
             budtmo/docker-android:emulator_9.0
 
+          # Cho may ao khoi dong
           sleep 15
-          docker ps
+          
+          # Tu dong xoa thanh tieu de Linux va phong to cua so
+          docker exec ugphone-container bash -c '
+            mkdir -p /home/androidusr/.fluxbox /root/.fluxbox
+            echo "[app] (name=.*) { [Deco] {NONE} [Maximized] {yes} }" | tee -a /home/androidusr/.fluxbox/apps /root/.fluxbox/apps
+          ' || true
 
-      - name: 3. Tao Link 1-Click vao thang man hinh
+      - name: 3. Tao Link 1-Click Tran Vien
         run: |
-          # Tai Cloudflare Tunnel
           curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
           chmod +x cloudflared
 
-          # Forward cong 6080
           ./cloudflared tunnel --url http://127.0.0.1:6080 > tunnel.log 2>&1 &
 
           sleep 10
           TUNNEL_URL=$(grep -o 'https://[-a-zA-Z0-9.]*trycloudflare.com' tunnel.log | head -n 1)
 
           echo "================================================================================"
-          echo "🚀 LINK 1-CLICK VAO THANG CLOUD PHONE (BAM LA CHAY, CHIA SE DUOC CHO NGUOI KHAC):"
+          echo "🚀 LINK CLOUD PHONE CHUAN MAN HINH NGANG (TRAN VIEN 100%, KHONG BI DAI):"
           echo "${TUNNEL_URL}/vnc.html?autoconnect=true&resize=scale"
           echo "================================================================================"
 
       - name: 4. Duy tri may treo game
         run: |
-          echo "Cloud Phone dang hoat dong on dinh..."
+          echo "Cloud Phone dang treo hoat dong on dinh..."
           for i in {1..360}; do
             sleep 60
             echo "Da treo duoc $i phut..."
