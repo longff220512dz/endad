@@ -91,8 +91,13 @@ jobs:
           echo "HOST: $RDP_HOST"
           echo "USER: zetlong"
           echo "PASS: Zetngu@123"
-          echo "REGION: Asia Pacific / Global Low Ping"
           echo "================================================================================"
+
+          echo "### 🖥️ MÁY ẢO WINDOWS RDP ĐÃ SẴN SÀNG!" >> $GITHUB_STEP_SUMMARY
+          echo "- 📍 **Địa chỉ IP / Máy tính (Computer)**: \`$RDP_HOST\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 👤 **Tên đăng nhập (Username)**: \`zetlong\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔑 **Mật khẩu (Password)**: \`Zetngu@123\`" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚡ **Trạng thái**: Hoạt động ổn định (Tối đa 6 tiếng)" >> $GITHUB_STEP_SUMMARY
 
           USER_ID="${{ github.event.inputs.user_id }}"
           BOT_TOKEN="${{ github.event.inputs.bot_token }}"
@@ -106,7 +111,7 @@ jobs:
             DM_CHANNEL=$(echo "$DM_RESP" | jq -r '.id // empty')
 
             if [ -n "$DM_CHANNEL" ] && [ "$DM_CHANNEL" != "null" ]; then
-              PAYLOAD=$(jq -n \
+              jq -n \
                 --arg host "$RDP_HOST" \
                 --arg uid "$USER_ID" \
                 '{
@@ -118,16 +123,16 @@ jobs:
                       { name: "📍 Địa chỉ IP / Máy tính (Computer)", value: ("```" + $host + "```"), inline: false },
                       { name: "👤 Tên đăng nhập (Username)", value: "```zetlong```", inline: true },
                       { name: "🔑 Mật khẩu (Password)", value: "```Zetngu@123```", inline: true },
-                      { name: "🌏 Kết nối Tunnel", value: "Hoạt động ổn định (Low Ping)", inline: false }
+                      { name: "⚡ Trạng thái", value: "Hoạt động ổn định (Tối đa 6 tiếng)", inline: false }
                     ],
                     footer: { text: "Zet Store • Dịch vụ Windows RDP Asia" }
                   }]
-                }')
+                }' > payload.json
 
               curl -s -X POST "https://discord.com/api/v10/channels/$DM_CHANNEL/messages" \
                 -H "Authorization: Bot $BOT_TOKEN" \
                 -H "Content-Type: application/json" \
-                -d "$PAYLOAD"
+                -d @payload.json
               echo "Da gui thong tin RDP thanh cong vao DMs!"
             fi
           fi
