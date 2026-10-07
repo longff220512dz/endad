@@ -6,50 +6,48 @@ jobs:
   launch-cloudphone:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Kiem tra va kich hoat phan cung KVM
+      - name: 1. Kich hoat phan cung KVM
         run: |
-          echo "Kiem tra ho tro ao hoa KVM tren GitHub Runner..."
           sudo chmod 777 /dev/kvm || true
           ls -l /dev/kvm
-          echo "KVM da san sang!"
 
-      - name: 2. Khoi dong Android Cloud Phone qua KVM
+      - name: 2. Khoi dong Android Sieu Muot (Khong vien, Giam Lag)
         run: |
-          echo "Dang tai va khoi dong Android Cloud Phone..."
-          # Chay Android 9.0 (Rao tai nguyen nhe nhat, boot cuc nhanh va on dinh de treo game)
+          echo "Khoi dong Android Cloud Phone che do toi uu toc do..."
+          # Su dung Nexus 5 nhe hon Galaxy S10 rat nhieu lan
+          # EMULATOR_NO_SKIN=true: Xoa bo toan bo vo may va nut thua ben phai
           docker run -d \
             -p 6080:6080 \
             -p 5555:5555 \
-            -e EMULATOR_DEVICE="Samsung Galaxy S10" \
+            -e EMULATOR_DEVICE="Nexus 5" \
+            -e EMULATOR_NO_SKIN=true \
             -e WEB_VNC=true \
+            -e EMULATOR_ADDITIONAL_ARGS="-no-audio -no-boot-anim" \
             --device /dev/kvm \
             --name ugphone-container \
             budtmo/docker-android:emulator_9.0
 
-          # Cho container on dinh
           sleep 15
           docker ps
 
-      - name: 3. Tao duong link Web truy cap tu xa (Cloudflare Tunnel)
+      - name: 3. Tao link Web Cloudflare Tunnel
         run: |
-          # Tai Cloudflare Quick Tunnel de cap link Web HTTPS mien phi
           curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
           chmod +x cloudflared
 
-          # Forward cong 6080 (Web cam ung Android) ra ngoai Internet
+          # Link noVNC truc tiep full man hinh
           ./cloudflared tunnel --url http://127.0.0.1:6080 > tunnel.log 2>&1 &
 
-          # Cho 10 giay de he thong tao xong domain
           sleep 10
           echo "=========================================================="
-          echo "🚀 LINK DIEU KHIEN CLOUD PHONE DUNG CHO DIEN THOAI & PC:"
+          echo "🚀 LINK CLOUD PHONE FULL MAN HINH (KHONG VIEN, GIAM LAG):"
           grep -o 'https://[-a-zA-Z0-9.]*trycloudflare.com' tunnel.log | head -n 1
           echo "=========================================================="
 
-      - name: 4. Giu Cloud Phone hoat dong treo game (Toi da 6 tieng)
+      - name: 4. Duy tri may treo game
         run: |
-          echo "Cloud Phone dang hoat dong! Hay mo link o tren tren trinh duyet dien thoai de su dung."
+          echo "Cloud Phone dang treo on dinh..."
           for i in {1..360}; do
             sleep 60
-            echo "Da treo may duoc $i phut..."
+            echo "Da treo duoc $i phut..."
           done
