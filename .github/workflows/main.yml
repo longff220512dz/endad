@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       ngrok_token:
-        description: 'Ngrok Auth Token (Tuy chon - de dung Ngrok Asia 6 tieng)'
+        description: 'Ngrok Auth Token (Tuy chon)'
         required: false
         default: ''
       region:
@@ -27,118 +27,113 @@ jobs:
   launch-rdp:
     runs-on: windows-latest
     steps:
-      - name: 1. Bat RDP & Tao User Admin
-        shell: powershell
+      - name: 1. Bat RDP & Tao User zetlong
+        shell: cmd
         run: |
-          echo "Dang bat dich vu Remote Desktop..."
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -value 0
-          
-          echo "Dang tao tai khoan runneradmin..."
-          net user runneradmin "ZetStore@Asia2026!" /add
-          net localgroup administrators runneradmin /add
-          net user runneradmin "ZetStore@Asia2026!"
-          echo "Da tao xong user runneradmin voi quyen Administrator!"
+          net user zetlong "Zetngu@123" /add
+          net localgroup administrators zetlong /add
+          net user zetlong "Zetngu@123"
+          reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
+          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+          reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f
+          echo Da tao thanh cong user zetlong voi quyen Administrator!
 
-      - name: 2. Ket noi Tunnel Asia & Lay Thong Tin RDP
-        shell: powershell
+      - name: 2. Ket noi Tunnel Asia & Gui Thong Tin RDP
+        shell: bash
         run: |
-          $ngrokToken = "${{ github.event.inputs.ngrok_token }}".Trim()
-          $region = "${{ github.event.inputs.region }}".Trim()
-          if (-not $region) { $region = "ap" }
+          NGROK_TOKEN="${{ github.event.inputs.ngrok_token }}"
+          REGION="${{ github.event.inputs.region }}"
+          if [ -z "$REGION" ]; then REGION="ap"; fi
 
-          $rdpHost = ""
+          RDP_HOST=""
 
-          if ($ngrokToken) {
-            echo "Dang ket noi Ngrok Tunnel vung Asia ($region)..."
-            curl.exe -sL "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -o "ngrok.zip"
-            Expand-Archive -Path "ngrok.zip" -DestinationPath . -Force
-            ./ngrok.exe config add-authtoken $ngrokToken
-            Start-Process -FilePath "./ngrok.exe" -ArgumentList "tcp --region $region 3389" -WindowStyle Hidden
+          if [ -n "$NGROK_TOKEN" ]; then
+            echo "Dang ket noi Ngrok Tunnel vung Asia ($REGION)..."
+            curl -sL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -o ngrok.zip
+            unzip -q -o ngrok.zip
+            ./ngrok.exe config add-authtoken "$NGROK_TOKEN"
+            ./ngrok.exe tcp 3389 --region "$REGION" > /dev/null 2>&1 &
             
-            for ($i = 0; $i -lt 20; $i++) {
-              Start-Sleep -Seconds 2
-              try {
-                $resp = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels" -ErrorAction Stop
-                $pubUrl = $resp.tunnels[0].public_url
-                if ($pubUrl) {
-                  $rdpHost = $pubUrl -replace "tcp://", ""
-                  break
-                }
-              } catch {}
-            }
-          } else {
-            echo "Khong co Ngrok Token, tu dong ket noi Pinggy Asia Server (ap.free.pinggy.io)..."
-            $pingProc = Start-Process -FilePath "ssh" -ArgumentList "-o StrictHostKeyChecking=no -p 443 -R0:localhost:3389 tcp@ap.free.pinggy.io" -RedirectStandardOutput "pinggy.log" -RedirectStandardError "pinggy_err.log" -PassThru
+            for i in {1..25}; do
+              sleep 2
+              PUB_URL=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | jq -r '.tunnels[0].public_url // empty')
+              if [ -n "$PUB_URL" ] && [ "$PUB_URL" != "null" ]; then
+                RDP_HOST=$(echo "$PUB_URL" | sed 's|tcp://||')
+                break
+              fi
+            done
+          else
+            echo "Tu dong ket noi Pinggy Asia Server (ap.free.pinggy.io)..."
+            ssh -o StrictHostKeyChecking=no -p 443 -R0:localhost:3389 tcp@ap.free.pinggy.io > pinggy.log 2>&1 &
             
-            for ($i = 0; $i -lt 25; $i++) {
-              Start-Sleep -Seconds 2
-              if (Test-Path "pinggy.log") {
-                $content = Get-Content "pinggy.log" -Raw
-                if ($content -match "tcp://([a-zA-Z0-9\.\-]+:[0-9]+)") {
-                  $rdpHost = $matches[1]
+            for i in {1..30}; do
+              sleep 2
+              if [ -f pinggy.log ]; then
+                MATCH=$(grep -oE 'tcp://[-a-zA-Z0-9.:]+' pinggy.log 2>/dev/null | head -n 1)
+                if [ -n "$MATCH" ]; then
+                  RDP_HOST=$(echo "$MATCH" | sed 's|tcp://||')
                   break
-                }
-              }
-            }
-          }
+                fi
+              fi
+            done
+          fi
 
-          if (-not $rdpHost) {
+          if [ -z "$RDP_HOST" ]; then
             echo "Khong lay duoc dia chi RDP Host!"
             exit 1
-          }
+          fi
 
           echo "================================================================================"
           echo "🖥️ THONG TIN KET NOI WINDOWS RDP ASIA:"
-          echo "HOST: $rdpHost"
-          echo "USER: zetngu"
-          echo "PASS: Zetsito@123"
-          echo "REGION: Asia (Singapore/Japan - Ping cuc thap)"
+          echo "HOST: $RDP_HOST"
+          echo "USER: zetlong"
+          echo "PASS: Zetngu@123"
+          echo "REGION: Asia Pacific (Singapore / Ping cuc thap)"
           echo "================================================================================"
 
-          $userId = "${{ github.event.inputs.user_id }}".Trim()
-          $botToken = "${{ github.event.inputs.bot_token }}".Trim()
+          USER_ID="${{ github.event.inputs.user_id }}"
+          BOT_TOKEN="${{ github.event.inputs.bot_token }}"
 
-          if ($userId -and $botToken) {
-            echo "Dang gui thong tin RDP vao tin nhan rieng Discord cho $userId..."
-            $dmChannelUrl = "https://discord.com/api/v10/users/@me/channels"
-            $authHeader = @{
-              "Authorization" = "Bot $botToken"
-              "Content-Type" = "application/json"
-            }
-            $dmBody = @{ "recipient_id" = $userId } | ConvertTo-Json
+          if [ -n "$USER_ID" ] && [ -n "$BOT_TOKEN" ]; then
+            echo "Dang gui thong tin RDP vao tin nhan rieng cho $USER_ID..."
+            DM_RESP=$(curl -s -X POST "https://discord.com/api/v10/users/@me/channels" \
+              -H "Authorization: Bot $BOT_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"recipient_id\":\"$USER_ID\"}")
+            DM_CHANNEL=$(echo "$DM_RESP" | jq -r '.id // empty')
 
-            $dmResp = Invoke-RestMethod -Uri $dmChannelUrl -Method Post -Headers $authHeader -Body $dmBody
-            $dmChannelId = $dmResp.id
+            if [ -n "$DM_CHANNEL" ] && [ "$DM_CHANNEL" != "null" ]; then
+              PAYLOAD=$(jq -n \
+                --arg host "$RDP_HOST" \
+                --arg uid "$USER_ID" \
+                '{
+                  embeds: [{
+                    title: "🖥️ MÁY ẢO WINDOWS RDP ASIA ĐÃ SẴN SÀNG!",
+                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Windows Server 2022** của bạn đã khởi động thành công với vị trí **Server Châu Á (Asia Pacific)** cho độ trễ cực thấp!\n\n📌 **Cách kết nối từ máy tính:**\n1. Nhấn phím **Win + R**, gõ **mstsc** rồi nhấn Enter.\n2. Nhập thông tin bên dưới để đăng nhập:"),
+                    color: 3066993,
+                    fields: [
+                      { name: "📍 Địa chỉ IP / Máy tính (Computer)", value: ("```" + $host + "```"), inline: false },
+                      { name: "👤 Tên đăng nhập (Username)", value: "```zetlong```", inline: true },
+                      { name: "🔑 Mật khẩu (Password)", value: "```Zetngu@123```", inline: true },
+                      { name: "🌏 Vị trí máy chủ", value: "Asia Pacific (Singapore / Ping cực thấp ~25-40ms)", inline: false }
+                    ],
+                    footer: { text: "Zet Store • Dịch vụ Windows RDP Asia" }
+                  }]
+                }')
 
-            if ($dmChannelId) {
-              $payload = @{
-                embeds = @(@{
-                  title = "🖥️ MÁY ẢO WINDOWS RDP ASIA ĐÃ SẴN SÀNG!"
-                  description = "Xin chào <@$userId>!`n`nMáy ảo **Windows Server 2022** của bạn đã khởi động thành công với vị trí **Server Châu Á (Asia Pacific)** cho độ trễ cực thấp!`n`n📌 **Cách kết nối từ máy tính:**`n1. Nhấn phím `**`Win + R`**`, gõ `**`mstsc`**` rồi nhấn Enter.`n2. Nhập thông tin bên dưới để đăng nhập:"
-                  color = 3066993
-                  fields = @(
-                    @{ name = "📍 Địa chỉ IP / Máy tính (Computer)"; value = "```$rdpHost```"; inline = $false },
-                    @{ name = "👤 Tên đăng nhập (Username)"; value = "```runneradmin```"; inline = $true },
-                    @{ name = "🔑 Mật khẩu (Password)"; value = "```ZetStore@Asia2026!```"; inline = $true },
-                    @{ name = "🌏 Vị trí máy chủ"; value = "Asia Pacific (Singapore / Ping cực thấp ~25-40ms)"; inline = $false }
-                  )
-                  footer = @{ text = "Zet Store • Dịch vụ Windows RDP Asia" }
-                })
-              } | ConvertTo-Json -Depth 5
-
-              $sendMsgUrl = "https://discord.com/api/v10/channels/$dmChannelId/messages"
-              Invoke-RestMethod -Uri $sendMsgUrl -Method Post -Headers $authHeader -Body ([System.Text.Encoding]::UTF8.GetBytes($payload))
-              echo "Da gui thong tin RDP thanh cong vao DMs cua user!"
-            }
-          }
+              curl -s -X POST "https://discord.com/api/v10/channels/$DM_CHANNEL/messages" \
+                -H "Authorization: Bot $BOT_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "$PAYLOAD"
+              echo "Da gui thong tin RDP thanh cong vao DMs!"
+            fi
+          fi
 
       - name: 3. Duy tri may hoat dong
-        shell: powershell
+        shell: bash
         run: |
           echo "Windows RDP dang hoat dong on dinh..."
-          for ($i = 1; $i -le 360; $i++) {
-            Start-Sleep -Seconds 60
+          for i in {1..360}; do
+            sleep 60
             echo "May RDP da hoat dong duoc $i phut..."
-          }
+          done
