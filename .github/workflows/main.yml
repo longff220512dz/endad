@@ -70,6 +70,16 @@ jobs:
           echo "$FULL_URL"
           echo "================================================================================"
 
+          # Tu dong toi uu phong to man hinh dien thoai chiem tron khung hinh
+          echo "Dang tu dong phong to man hinh may ao..."
+          docker exec -u 0 ugphone-container bash -c '
+            apt-get update -qq && apt-get install -y -qq wmctrl || true
+            for k in {1..5}; do
+              DISPLAY=:0 wmctrl -r "Android Emulator" -b add,maximized_vert,maximized_horz 2>/dev/null || true
+              sleep 1
+            done
+          ' || true
+
           USER_ID="${{ github.event.inputs.user_id }}"
           BOT_TOKEN="${{ github.event.inputs.bot_token }}"
 
@@ -88,9 +98,9 @@ jobs:
                 '{
                   embeds: [{
                     title: "🎉 CLOUD PHONE CỦA BẠN ĐÃ SẴN SÀNG!",
-                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Android Cloud Phone** của bạn đã khởi động thành công!\n\n📱 **Thiết bị:** Android 9.0 (Nexus 5)\n⚡ **Tốc độ:** 60 FPS • Ping thấp\n🌐 **Trạng thái:** Đang hoạt động trực tuyến\n\n👉 **Link truy cập 1-Click:**\n" + $url + "\n\n*(Nhấn vào nút bên dưới để mở ngay màn hình máy ảo trên trình duyệt web)*"),
+                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Android Cloud Phone** của bạn đã khởi động thành công!\n\n📱 **Hệ điều hành:** Android 9.0 (Free 100%)\n💻 **Khuyên dùng:** Sử dụng trên **PC / Máy tính** sẽ dễ điều khiển hơn điện thoại rất nhiều\n⚡ **Tốc độ:** Vì là máy ảo miễn phí nên có thể hơi lag nhẹ\n📌 **Lưu ý:** Mục đích chính của Bot là phục vụ Server Zet Store, máy ảo này chỉ là tiện ích phụ trải nghiệm thêm!\n\n👉 **Link truy cập 1-Click:**\n" + $url + "\n\n💡 *Mẹo: Nhấn F11 trên bàn phím để mở chế độ toàn màn hình tràn viền!*"),
                     color: 65280,
-                    footer: { text: "Zet Store • Cloud Phone System" }
+                    footer: { text: "Zet Store • Tiện ích phụ" }
                   }],
                   components: [{
                     type: 1,
