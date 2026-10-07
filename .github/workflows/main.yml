@@ -1,7 +1,15 @@
-name: All-In-One UgPhone Cloud (Direct Link)
+name: Windows RDP Asia (Low Ping)
 on:
   workflow_dispatch:
     inputs:
+      ngrok_token:
+        description: 'Ngrok Auth Token (Tuy chon - de dung Ngrok Asia 6 tieng)'
+        required: false
+        default: ''
+      region:
+        description: 'Ngrok Region (ap, jp, in, us, eu)'
+        required: false
+        default: 'ap'
       user_id:
         description: 'Discord User ID'
         required: false
@@ -16,146 +24,121 @@ on:
         default: ''
 
 jobs:
-  launch-cloudphone:
-    runs-on: ubuntu-latest
+  launch-rdp:
+    runs-on: windows-latest
     steps:
-      - name: 1. Kich hoat phan cung KVM
+      - name: 1. Bat RDP & Tao User Admin
+        shell: powershell
         run: |
-          sudo chmod 777 /dev/kvm || true
-          ls -l /dev/kvm
+          echo "Dang bat dich vu Remote Desktop..."
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -value 0
+          
+          echo "Dang tao tai khoan runneradmin..."
+          net user runneradmin "ZetStore@Asia2026!" /add
+          net localgroup administrators runneradmin /add
+          net user runneradmin "ZetStore@Asia2026!"
+          echo "Da tao xong user runneradmin voi quyen Administrator!"
 
-      - name: 2. Khoi dong Android Nexus 5
+      - name: 2. Ket noi Tunnel Asia & Lay Thong Tin RDP
+        shell: powershell
         run: |
-          echo "Khoi dong Cloud Phone..."
-          docker run -d \
-            -p 6080:6080 \
-            -p 5555:5555 \
-            -e EMULATOR_DEVICE="Nexus 5" \
-            -e EMULATOR_NO_SKIN=true \
-            -e WEB_VNC=true \
-            -e EMULATOR_ADDITIONAL_ARGS="-no-audio -no-boot-anim" \
-            --device /dev/kvm \
-            --name ugphone-container \
-            budtmo/docker-android:emulator_9.0
+          $ngrokToken = "${{ github.event.inputs.ngrok_token }}".Trim()
+          $region = "${{ github.event.inputs.region }}".Trim()
+          if (-not $region) { $region = "ap" }
 
-          # Cai dat cong cu va cau hinh Openbox auto-maximize
-          echo "Dang cau hinh Openbox tu dong phong to cua so..."
-          docker exec -u 0 ugphone-container bash -c '
-            apt-get update -qq && apt-get install -y -qq wmctrl xdotool || true
-            mkdir -p /home/androidusr/.config/openbox
-            echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?><openbox_config xmlns=\"http://openbox.org/3.4/rc\"><applications><application class=\"*\" name=\"*\" title=\"*\"><maximized>yes</maximized></application></applications></openbox_config>" > /home/androidusr/.config/openbox/rc.xml
-            chown -R androidusr:androidusr /home/androidusr/.config
-            su - androidusr -c "DISPLAY=:0 xhost +" 2>/dev/null || true
-            xhost + 2>/dev/null || true
-            su - androidusr -c "DISPLAY=:0 openbox --reconfigure" 2>/dev/null || true
-          ' || true
+          $rdpHost = ""
 
-      - name: 3. Tao Link 1-Click, Phong to toan man hinh & Gui DM
-        run: |
-          curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
-          chmod +x cloudflared
+          if ($ngrokToken) {
+            echo "Dang ket noi Ngrok Tunnel vung Asia ($region)..."
+            curl.exe -sL "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip" -o "ngrok.zip"
+            Expand-Archive -Path "ngrok.zip" -DestinationPath . -Force
+            ./ngrok.exe config add-authtoken $ngrokToken
+            Start-Process -FilePath "./ngrok.exe" -ArgumentList "tcp --region $region 3389" -WindowStyle Hidden
+            
+            for ($i = 0; $i -lt 20; $i++) {
+              Start-Sleep -Seconds 2
+              try {
+                $resp = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels" -ErrorAction Stop
+                $pubUrl = $resp.tunnels[0].public_url
+                if ($pubUrl) {
+                  $rdpHost = $pubUrl -replace "tcp://", ""
+                  break
+                }
+              } catch {}
+            }
+          } else {
+            echo "Khong co Ngrok Token, tu dong ket noi Pinggy Asia Server (ap.free.pinggy.io)..."
+            $pingProc = Start-Process -FilePath "ssh" -ArgumentList "-o StrictHostKeyChecking=no -p 443 -R0:localhost:3389 tcp@ap.free.pinggy.io" -RedirectStandardOutput "pinggy.log" -RedirectStandardError "pinggy_err.log" -PassThru
+            
+            for ($i = 0; $i -lt 25; $i++) {
+              Start-Sleep -Seconds 2
+              if (Test-Path "pinggy.log") {
+                $content = Get-Content "pinggy.log" -Raw
+                if ($content -match "tcp://([a-zA-Z0-9\.\-]+:[0-9]+)") {
+                  $rdpHost = $matches[1]
+                  break
+                }
+              }
+            }
+          }
 
-          # Forward cong 6080
-          ./cloudflared tunnel --url http://127.0.0.1:6080 > tunnel.log 2>&1 &
-
-          echo "Dang doi Cloudflare Tunnel khoi tao..."
-          TUNNEL_URL=""
-          for i in {1..30}; do
-            TUNNEL_URL=$(grep -o 'https://[-a-zA-Z0-9.]*trycloudflare.com' tunnel.log 2>/dev/null | head -n 1)
-            if [ -n "$TUNNEL_URL" ]; then
-              break
-            fi
-            sleep 2
-          done
-
-          if [ -z "$TUNNEL_URL" ]; then
-            echo "Khong lay duoc Tunnel URL!"
+          if (-not $rdpHost) {
+            echo "Khong lay duoc dia chi RDP Host!"
             exit 1
-          fi
+          }
 
-          FULL_URL="${TUNNEL_URL}/vnc.html?autoconnect=true&resize=scale"
           echo "================================================================================"
-          echo "🚀 LINK 1-CLICK VAO THANG CLOUD PHONE:"
-          echo "$FULL_URL"
+          echo "🖥️ THONG TIN KET NOI WINDOWS RDP ASIA:"
+          echo "HOST: $rdpHost"
+          echo "USER: zetngu"
+          echo "PASS: Zetsito@123"
+          echo "REGION: Asia (Singapore/Japan - Ping cuc thap)"
           echo "================================================================================"
 
-          # Cho den khi Emulator khoi dong xong va phong to toan bo man hinh
-          echo "Dang doi Android Emulator xuat hien de tu dong phong to man hinh..."
-          for i in {1..90}; do
-            WID=$(docker exec ugphone-container bash -c '
-              export DISPLAY=:0
-              wmctrl -l 2>/dev/null | grep -iE "Emulator|nexus|android|5554" | awk "{print \$1}" | head -n 1
-            ' 2>/dev/null || true)
+          $userId = "${{ github.event.inputs.user_id }}".Trim()
+          $botToken = "${{ github.event.inputs.bot_token }}".Trim()
 
-            if [ -n "$WID" ]; then
-              echo ">>> DA PHAT HIEN CUA SO ANDROID ($WID)!"
-              docker exec ugphone-container bash -c "
-                export DISPLAY=:0
-                wmctrl -i -r '$WID' -b add,maximized_vert,maximized_horz || true
-                xdotool windowmaximize '$WID' 2>/dev/null || true
-                xdotool windowmove '$WID' 0 0 2>/dev/null || true
-                xdotool windowsize '$WID' 100% 100% 2>/dev/null || true
-              " || true
-              echo ">>> DA PHONG TO TOAN BO MAN HINH CLOUD PHONE THANH CONG!"
-              break
-            fi
-            sleep 2
-          done
+          if ($userId -and $botToken) {
+            echo "Dang gui thong tin RDP vao tin nhan rieng Discord cho $userId..."
+            $dmChannelUrl = "https://discord.com/api/v10/users/@me/channels"
+            $authHeader = @{
+              "Authorization" = "Bot $botToken"
+              "Content-Type" = "application/json"
+            }
+            $dmBody = @{ "recipient_id" = $userId } | ConvertTo-Json
 
-          USER_ID="${{ github.event.inputs.user_id }}"
-          BOT_TOKEN="${{ github.event.inputs.bot_token }}"
+            $dmResp = Invoke-RestMethod -Uri $dmChannelUrl -Method Post -Headers $authHeader -Body $dmBody
+            $dmChannelId = $dmResp.id
 
-          if [ -n "$USER_ID" ] && [ -n "$BOT_TOKEN" ]; then
-            echo "Dang gui link vao DM cho $USER_ID..."
-            DM_RESP=$(curl -s -X POST "https://discord.com/api/v10/users/@me/channels" \
-              -H "Authorization: Bot $BOT_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"recipient_id\":\"$USER_ID\"}")
-            DM_CHANNEL=$(echo "$DM_RESP" | jq -r '.id // empty')
+            if ($dmChannelId) {
+              $payload = @{
+                embeds = @(@{
+                  title = "🖥️ MÁY ẢO WINDOWS RDP ASIA ĐÃ SẴN SÀNG!"
+                  description = "Xin chào <@$userId>!`n`nMáy ảo **Windows Server 2022** của bạn đã khởi động thành công với vị trí **Server Châu Á (Asia Pacific)** cho độ trễ cực thấp!`n`n📌 **Cách kết nối từ máy tính:**`n1. Nhấn phím `**`Win + R`**`, gõ `**`mstsc`**` rồi nhấn Enter.`n2. Nhập thông tin bên dưới để đăng nhập:"
+                  color = 3066993
+                  fields = @(
+                    @{ name = "📍 Địa chỉ IP / Máy tính (Computer)"; value = "```$rdpHost```"; inline = $false },
+                    @{ name = "👤 Tên đăng nhập (Username)"; value = "```runneradmin```"; inline = $true },
+                    @{ name = "🔑 Mật khẩu (Password)"; value = "```ZetStore@Asia2026!```"; inline = $true },
+                    @{ name = "🌏 Vị trí máy chủ"; value = "Asia Pacific (Singapore / Ping cực thấp ~25-40ms)"; inline = $false }
+                  )
+                  footer = @{ text = "Zet Store • Dịch vụ Windows RDP Asia" }
+                })
+              } | ConvertTo-Json -Depth 5
 
-            if [ -n "$DM_CHANNEL" ] && [ "$DM_CHANNEL" != "null" ]; then
-              PAYLOAD=$(jq -n \
-                --arg url "$FULL_URL" \
-                --arg uid "$USER_ID" \
-                '{
-                  embeds: [{
-                    title: "🎉 CLOUD PHONE CỦA BẠN ĐÃ SẴN SÀNG!",
-                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Android Cloud Phone** của bạn đã khởi động và **tự động phóng to màn hình** thành công!\n\n📱 **Hệ điều hành:** Android 9.0 (Free 100%)\n💻 **Khuyên dùng:** Sử dụng trên **PC / Máy tính** sẽ dễ điều khiển hơn điện thoại rất nhiều\n⚡ **Tốc độ:** Vì là máy ảo miễn phí nên có thể hơi lag nhẹ\n📌 **Lưu ý:** Mục đích chính của Bot là phục vụ Server Zet Store, máy ảo này chỉ là tiện ích phụ trải nghiệm thêm!\n\n👉 **Link truy cập 1-Click:**\n" + $url + "\n\n💡 *Mẹo: Nhấn F11 trên bàn phím để mở chế độ toàn màn hình tràn viền!*"),
-                    color: 65280,
-                    footer: { text: "Zet Store • Tiện ích phụ" }
-                  }],
-                  components: [{
-                    type: 1,
-                    components: [{
-                      type: 2,
-                      style: 5,
-                      label: "🚀 Mở Màn Hình Cloud Phone Ngay",
-                      url: $url
-                    }]
-                  }]
-                }')
+              $sendMsgUrl = "https://discord.com/api/v10/channels/$dmChannelId/messages"
+              Invoke-RestMethod -Uri $sendMsgUrl -Method Post -Headers $authHeader -Body ([System.Text.Encoding]::UTF8.GetBytes($payload))
+              echo "Da gui thong tin RDP thanh cong vao DMs cua user!"
+            }
+          }
 
-              curl -s -X POST "https://discord.com/api/v10/channels/$DM_CHANNEL/messages" \
-                -H "Authorization: Bot $BOT_TOKEN" \
-                -H "Content-Type: application/json" \
-                -d "$PAYLOAD"
-              echo "Da gui link thanh cong vao DMs!"
-            fi
-          fi
-
-      - name: 4. Duy tri may treo game va duy tri phong to
+      - name: 3. Duy tri may hoat dong
+        shell: powershell
         run: |
-          echo "Cloud Phone dang hoat dong on dinh..."
-          for i in {1..360}; do
-            if [ $((i % 5)) -eq 0 ]; then
-              docker exec ugphone-container bash -c '
-                export DISPLAY=:0
-                WID=$(wmctrl -l 2>/dev/null | grep -iE "Emulator|nexus|android|5554" | awk "{print \$1}" | head -n 1)
-                if [ -n "$WID" ]; then
-                  wmctrl -i -r "$WID" -b add,maximized_vert,maximized_horz 2>/dev/null || true
-                fi
-              ' || true
-            fi
-            sleep 60
-            echo "Da treo duoc $i phut..."
-          done
+          echo "Windows RDP dang hoat dong on dinh..."
+          for ($i = 1; $i -le 360; $i++) {
+            Start-Sleep -Seconds 60
+            echo "May RDP da hoat dong duoc $i phut..."
+          }
