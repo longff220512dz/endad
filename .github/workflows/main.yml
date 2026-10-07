@@ -24,7 +24,6 @@ jobs:
           sudo chmod 777 /dev/kvm || true
           ls -l /dev/kvm
 
-          # Chuan bi file cau hinh Openbox auto-maximize tu truoc
           mkdir -p /tmp/openbox_cfg
           docker run --rm budtmo/docker-android:emulator_9.0 cat /etc/xdg/openbox/rc.xml > /tmp/openbox_cfg/rc.xml || true
           if [ -s /tmp/openbox_cfg/rc.xml ]; then
@@ -51,7 +50,6 @@ jobs:
             --name ugphone-container \
             budtmo/docker-android:emulator_9.0
 
-          # Cai dat wmctrl va xdotool trong container de ho tro phong to chu dong
           docker exec -u 0 ugphone-container bash -c '
             apt-get update -qq && apt-get install -y -qq wmctrl xdotool || true
             su - androidusr -c "DISPLAY=:0 xhost +" 2>/dev/null || true
@@ -87,7 +85,6 @@ jobs:
           echo "$FULL_URL"
           echo "================================================================================"
 
-          # Cho den khi Emulator khoi dong xong va phong to toan bo man hinh
           echo "Dang doi Android Emulator xuat hien de tu dong phong to..."
           for i in {1..90}; do
             WID=$(docker exec ugphone-container bash -c '
@@ -155,7 +152,6 @@ jobs:
         run: |
           echo "Cloud Phone dang hoat dong on dinh..."
           for i in {1..360}; do
-            # Dinh ky kiem tra va giu cua so luon phong to
             if [ $((i % 5)) -eq 0 ]; then
               docker exec ugphone-container bash -c '
                 export DISPLAY=:0
