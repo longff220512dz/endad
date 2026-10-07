@@ -24,7 +24,7 @@ jobs:
           sudo chmod 777 /dev/kvm || true
           ls -l /dev/kvm
 
-      - name: 2. Khoi dong Android Nexus 5 (Ban goc chuan)
+      - name: 2. Khoi dong Android Nexus 5
         run: |
           echo "Khoi dong Cloud Phone..."
           docker run -d \
@@ -38,10 +38,34 @@ jobs:
             --name ugphone-container \
             budtmo/docker-android:emulator_9.0
 
-          sleep 15
-          docker ps
+          # Cai dat cong cu va thiet lap Openbox auto-maximize
+          echo "Dang cau hinh Openbox tu dong phong to cua so..."
+          docker exec -u 0 ugphone-container bash -c '
+            apt-get update -qq && apt-get install -y -qq wmctrl xdotool || true
+            mkdir -p /home/androidusr/.config/openbox
+            if [ -f /etc/xdg/openbox/rc.xml ]; then
+              cp /etc/xdg/openbox/rc.xml /home/androidusr/.config/openbox/rc.xml
+              sed -i "s|<applications>|<applications><application class=\"*\" name=\"*\" title=\"*\"><maximized>yes</maximized></application>|g" /home/androidusr/.config/openbox/rc.xml || true
+              sed -i "s|<applications>|<applications><application class=\"*\" name=\"*\" title=\"*\"><maximized>yes</maximized></application>|g" /etc/xdg/openbox/rc.xml || true
+            else
+              cat << "EOF" > /home/androidusr/.config/openbox/rc.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <applications>
+    <application class="*" name="*" title="*">
+      <maximized>yes</maximized>
+    </application>
+  </applications>
+</openbox_config>
+EOF
+            fi
+            chown -R androidusr:androidusr /home/androidusr/.config
+            su - androidusr -c "DISPLAY=:0 xhost +" 2>/dev/null || true
+            xhost + 2>/dev/null || true
+            su - androidusr -c "DISPLAY=:0 openbox --reconfigure" 2>/dev/null || true
+          ' || true
 
-      - name: 3. Tao Link 1-Click & Tu dong gui truc tiep vao DMs cua User
+      - name: 3. Tao Link 1-Click, Phong to man hinh & Gui DM
         run: |
           curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
           chmod +x cloudflared
@@ -51,7 +75,7 @@ jobs:
 
           echo "Dang doi Cloudflare Tunnel khoi tao..."
           TUNNEL_URL=""
-          for i in {1..20}; do
+          for i in {1..30}; do
             TUNNEL_URL=$(grep -o 'https://[-a-zA-Z0-9.]*trycloudflare.com' tunnel.log 2>/dev/null | head -n 1)
             if [ -n "$TUNNEL_URL" ]; then
               break
@@ -70,15 +94,28 @@ jobs:
           echo "$FULL_URL"
           echo "================================================================================"
 
-          # Tu dong toi uu phong to man hinh dien thoai chiem tron khung hinh
-          echo "Dang tu dong phong to man hinh may ao..."
-          docker exec -u 0 ugphone-container bash -c '
-            apt-get update -qq && apt-get install -y -qq wmctrl || true
-            for k in {1..5}; do
-              DISPLAY=:0 wmctrl -r "Android Emulator" -b add,maximized_vert,maximized_horz 2>/dev/null || true
-              sleep 1
-            done
-          ' || true
+          # Cho den khi Emulator khoi dong xong va phong to toan bo man hinh
+          echo "Dang doi Android Emulator xuat hien de tu dong phong to man hinh..."
+          for i in {1..90}; do
+            WID=$(docker exec ugphone-container bash -c '
+              export DISPLAY=:0
+              wmctrl -l 2>/dev/null | grep -iE "Emulator|nexus|android|5554" | awk "{print \$1}" | head -n 1
+            ' 2>/dev/null || true)
+
+            if [ -n "$WID" ]; then
+              echo ">>> DA PHAT HIEN CUA SO ANDROID ($WID)!"
+              docker exec ugphone-container bash -c "
+                export DISPLAY=:0
+                wmctrl -i -r '$WID' -b add,maximized_vert,maximized_horz || true
+                xdotool windowmaximize '$WID' 2>/dev/null || true
+                xdotool windowmove '$WID' 0 0 2>/dev/null || true
+                xdotool windowsize '$WID' 100% 100% 2>/dev/null || true
+              " || true
+              echo ">>> DA PHONG TO TOAN BO MAN HINH CLOUD PHONE THANH CONG!"
+              break
+            fi
+            sleep 2
+          done
 
           USER_ID="${{ github.event.inputs.user_id }}"
           BOT_TOKEN="${{ github.event.inputs.bot_token }}"
@@ -98,7 +135,7 @@ jobs:
                 '{
                   embeds: [{
                     title: "🎉 CLOUD PHONE CỦA BẠN ĐÃ SẴN SÀNG!",
-                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Android Cloud Phone** của bạn đã khởi động thành công!\n\n📱 **Hệ điều hành:** Android 9.0 (Free 100%)\n💻 **Khuyên dùng:** Sử dụng trên **PC / Máy tính** sẽ dễ điều khiển hơn điện thoại rất nhiều\n⚡ **Tốc độ:** Vì là máy ảo miễn phí nên có thể hơi lag nhẹ\n📌 **Lưu ý:** Mục đích chính của Bot là phục vụ Server Zet Store, máy ảo này chỉ là tiện ích phụ trải nghiệm thêm!\n\n👉 **Link truy cập 1-Click:**\n" + $url + "\n\n💡 *Mẹo: Nhấn F11 trên bàn phím để mở chế độ toàn màn hình tràn viền!*"),
+                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Android Cloud Phone** của bạn đã khởi động và **tự động phóng to màn hình** thành công!\n\n📱 **Hệ điều hành:** Android 9.0 (Free 100%)\n💻 **Khuyên dùng:** Sử dụng trên **PC / Máy tính** sẽ dễ điều khiển hơn điện thoại rất nhiều\n⚡ **Tốc độ:** Vì là máy ảo miễn phí nên có thể hơi lag nhẹ\n📌 **Lưu ý:** Mục đích chính của Bot là phục vụ Server Zet Store, máy ảo này chỉ là tiện ích phụ trải nghiệm thêm!\n\n👉 **Link truy cập 1-Click:**\n" + $url + "\n\n💡 *Mẹo: Nhấn F11 trên bàn phím để mở chế độ toàn màn hình tràn viền!*"),
                     color: 65280,
                     footer: { text: "Zet Store • Tiện ích phụ" }
                   }],
@@ -121,10 +158,20 @@ jobs:
             fi
           fi
 
-      - name: 4. Duy tri may treo game
+      - name: 4. Duy tri may treo game va duy tri phong to
         run: |
           echo "Cloud Phone dang hoat dong on dinh..."
           for i in {1..360}; do
+            # Dinh ky kiem tra va giu cua so luon phong to
+            if [ $((i % 5)) -eq 0 ]; then
+              docker exec ugphone-container bash -c '
+                export DISPLAY=:0
+                WID=$(wmctrl -l 2>/dev/null | grep -iE "Emulator|nexus|android|5554" | awk "{print \$1}" | head -n 1)
+                if [ -n "$WID" ]; then
+                  wmctrl -i -r "$WID" -b add,maximized_vert,maximized_horz 2>/dev/null || true
+                fi
+              ' || true
+            fi
             sleep 60
             echo "Da treo duoc $i phut..."
           done
