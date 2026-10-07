@@ -41,6 +41,7 @@ jobs:
       - name: 2. Ket noi Tunnel Asia & Gui Thong Tin RDP
         shell: bash
         run: |
+          set +e
           NGROK_TOKEN="${{ github.event.inputs.ngrok_token }}"
           REGION="${{ github.event.inputs.region }}"
           if [ -z "$REGION" ]; then REGION="ap"; fi
@@ -56,22 +57,24 @@ jobs:
             
             for i in {1..25}; do
               sleep 2
-              PUB_URL=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | jq -r '.tunnels[0].public_url // empty')
+              PUB_URL=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | jq -r '.tunnels[0].public_url // empty' 2>/dev/null)
               if [ -n "$PUB_URL" ] && [ "$PUB_URL" != "null" ]; then
                 RDP_HOST=$(echo "$PUB_URL" | sed 's|tcp://||')
                 break
               fi
             done
           else
-            echo "Tu dong ket noi Pinggy Asia Server (ap.free.pinggy.io)..."
-            ssh -o StrictHostKeyChecking=no -p 443 -R0:localhost:3389 tcp@ap.free.pinggy.io > pinggy.log 2>&1 &
+            echo "Khong co Ngrok Token -> Tu dong ket noi Bore Public Tunnel (Free 100% khong can token)..."
+            curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-pc-windows-msvc.zip -o bore.zip
+            unzip -q -o bore.zip
+            ./bore.exe local 3389 --to bore.pub > bore.log 2>&1 &
             
-            for i in {1..30}; do
+            for i in {1..20}; do
               sleep 2
-              if [ -f pinggy.log ]; then
-                MATCH=$(grep -oE 'tcp://[-a-zA-Z0-9.:]+' pinggy.log 2>/dev/null | head -n 1)
-                if [ -n "$MATCH" ]; then
-                  RDP_HOST=$(echo "$MATCH" | sed 's|tcp://||')
+              if [ -f bore.log ]; then
+                PORT=$(grep -oE 'listening at bore.pub:[0-9]+' bore.log 2>/dev/null | grep -oE '[0-9]+' | head -n 1)
+                if [ -n "$PORT" ]; then
+                  RDP_HOST="bore.pub:$PORT"
                   break
                 fi
               fi
@@ -88,7 +91,7 @@ jobs:
           echo "HOST: $RDP_HOST"
           echo "USER: zetlong"
           echo "PASS: Zetngu@123"
-          echo "REGION: Asia Pacific (Singapore / Ping cuc thap)"
+          echo "REGION: Asia Pacific / Global Low Ping"
           echo "================================================================================"
 
           USER_ID="${{ github.event.inputs.user_id }}"
@@ -108,14 +111,14 @@ jobs:
                 --arg uid "$USER_ID" \
                 '{
                   embeds: [{
-                    title: "🖥️ MÁY ẢO WINDOWS RDP ASIA ĐÃ SẴN SÀNG!",
-                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Windows Server 2022** của bạn đã khởi động thành công với vị trí **Server Châu Á (Asia Pacific)** cho độ trễ cực thấp!\n\n📌 **Cách kết nối từ máy tính:**\n1. Nhấn phím **Win + R**, gõ **mstsc** rồi nhấn Enter.\n2. Nhập thông tin bên dưới để đăng nhập:"),
+                    title: "🖥️ MÁY ẢO WINDOWS RDP ĐÃ SẴN SÀNG!",
+                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Windows Server 2022** của bạn đã khởi động thành công!\n\n📌 **Cách kết nối từ máy tính:**\n1. Nhấn phím **Win + R**, gõ **mstsc** rồi nhấn Enter.\n2. Nhập thông tin bên dưới để đăng nhập:"),
                     color: 3066993,
                     fields: [
                       { name: "📍 Địa chỉ IP / Máy tính (Computer)", value: ("```" + $host + "```"), inline: false },
                       { name: "👤 Tên đăng nhập (Username)", value: "```zetlong```", inline: true },
                       { name: "🔑 Mật khẩu (Password)", value: "```Zetngu@123```", inline: true },
-                      { name: "🌏 Vị trí máy chủ", value: "Asia Pacific (Singapore / Ping cực thấp ~25-40ms)", inline: false }
+                      { name: "🌏 Kết nối Tunnel", value: "Hoạt động ổn định (Low Ping)", inline: false }
                     ],
                     footer: { text: "Zet Store • Dịch vụ Windows RDP Asia" }
                   }]
