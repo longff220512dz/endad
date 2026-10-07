@@ -1,4 +1,4 @@
-name: All-In-One UgPhone Cloud (Full Screen)
+name: All-In-One UgPhone Cloud (Direct Link)
 on:
   workflow_dispatch:
 
@@ -11,58 +11,45 @@ jobs:
           sudo chmod 777 /dev/kvm || true
           ls -l /dev/kvm
 
-      - name: 2. Khoi dong Android chay ngam
+      - name: 2. Khoi dong Android toi uu
         run: |
-          echo "Khoi dong Android Cloud Phone..."
-          # Chay Android nhe nhang, khong can load giao dien VNC thua
+          echo "Khoi dong Cloud Phone..."
           docker run -d \
+            -p 6080:6080 \
             -p 5555:5555 \
             -e EMULATOR_DEVICE="Nexus 5" \
             -e EMULATOR_NO_SKIN=true \
             -e WEB_VNC=true \
+            -e SCREEN_WIDTH=720 \
+            -e SCREEN_HEIGHT=1280 \
             -e EMULATOR_ADDITIONAL_ARGS="-no-audio -no-boot-anim" \
             --device /dev/kvm \
             --name ugphone-container \
             budtmo/docker-android:emulator_9.0
 
-          # Cho Android khoi dong san sang
-          sleep 20
+          sleep 15
           docker ps
 
-      - name: 3. Kich hoat bo phat luong Tran Vien 100% (Scrcpy-Web)
+      - name: 3. Tao Link 1-Click vao thang man hinh
         run: |
-          echo "Ket noi ADB va khoi chay Scrcpy-Web..."
-          sudo apt-get update && sudo apt-get install -y adb
-          adb connect 127.0.0.1:5555
-          
-          # Chay Web Scrcpy tren cong 8000 (Khong vien, khong thanh tieu de)
-          docker run -d \
-            --name ws-scrcpy \
-            --restart=always \
-            --net=host \
-            scavin/ws-scrcpy
-
-          sleep 5
-
-      - name: 4. Tao link Web HTTPS tu dong
-        run: |
-          # Tai Cloudflare Quick Tunnel
+          # Tai Cloudflare Tunnel
           curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
           chmod +x cloudflared
 
-          # Tro thang vao cong 8000 cua Scrcpy-Web (Tran vien 100%)
-          ./cloudflared tunnel --url http://127.0.0.1:8000 > tunnel.log 2>&1 &
+          # Forward cong 6080
+          ./cloudflared tunnel --url http://127.0.0.1:6080 > tunnel.log 2>&1 &
 
-          # Cho lay link va in ra man hinh
           sleep 10
-          echo "=========================================================="
-          echo "🚀 LINK CLOUD PHONE TRAN VIEN 100% (CHUAN UGPHONE):"
-          grep -o 'https://[-a-zA-Z0-9.]*trycloudflare.com' tunnel.log | head -n 1
-          echo "=========================================================="
+          TUNNEL_URL=$(grep -o 'https://[-a-zA-Z0-9.]*trycloudflare.com' tunnel.log | head -n 1)
 
-      - name: 5. Duy tri may treo game
+          echo "================================================================================"
+          echo "🚀 LINK 1-CLICK VAO THANG CLOUD PHONE (BAM LA CHAY, CHIA SE DUOC CHO NGUOI KHAC):"
+          echo "${TUNNEL_URL}/vnc.html?autoconnect=true&resize=scale"
+          echo "================================================================================"
+
+      - name: 4. Duy tri may treo game
         run: |
-          echo "Cloud Phone dang treo hoat dong lien tuc..."
+          echo "Cloud Phone dang hoat dong on dinh..."
           for i in {1..360}; do
             sleep 60
             echo "Da treo duoc $i phut..."
