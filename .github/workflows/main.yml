@@ -19,19 +19,10 @@ jobs:
   launch-cloudphone:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Kich hoat phan cung KVM & Chuan bi cau hinh Openbox
+      - name: 1. Kich hoat phan cung KVM
         run: |
           sudo chmod 777 /dev/kvm || true
           ls -l /dev/kvm
-
-          mkdir -p /tmp/openbox_cfg
-          docker run --rm budtmo/docker-android:emulator_9.0 cat /etc/xdg/openbox/rc.xml > /tmp/openbox_cfg/rc.xml || true
-          if [ -s /tmp/openbox_cfg/rc.xml ]; then
-            sed -i 's|<applications>|<applications><application class="*" name="*" title="*"><maximized>yes</maximized></application>|g' /tmp/openbox_cfg/rc.xml
-          else
-            echo '<?xml version="1.0" encoding="UTF-8"?><openbox_config xmlns="http://openbox.org/3.4/rc"><applications><application class="*" name="*" title="*"><maximized>yes</maximized></application></applications></openbox_config>' > /tmp/openbox_cfg/rc.xml
-          fi
-          echo "Da tao xong file cau hinh Openbox auto-maximize!"
 
       - name: 2. Khoi dong Android Nexus 5
         run: |
@@ -43,20 +34,38 @@ jobs:
             -e EMULATOR_NO_SKIN=true \
             -e WEB_VNC=true \
             -e EMULATOR_ADDITIONAL_ARGS="-no-audio -no-boot-anim" \
-            -v /tmp/openbox_cfg/rc.xml:/etc/xdg/openbox/rc.xml:ro \
-            -v /tmp/openbox_cfg/rc.xml:/root/.config/openbox/rc.xml:ro \
-            -v /tmp/openbox_cfg/rc.xml:/home/androidusr/.config/openbox/rc.xml:ro \
             --device /dev/kvm \
             --name ugphone-container \
             budtmo/docker-android:emulator_9.0
 
+          # Cai dat cong cu va thiet lap Openbox auto-maximize
+          echo "Dang cau hinh Openbox tu dong phong to cua so..."
           docker exec -u 0 ugphone-container bash -c '
             apt-get update -qq && apt-get install -y -qq wmctrl xdotool || true
+            mkdir -p /home/androidusr/.config/openbox
+            if [ -f /etc/xdg/openbox/rc.xml ]; then
+              cp /etc/xdg/openbox/rc.xml /home/androidusr/.config/openbox/rc.xml
+              sed -i "s|<applications>|<applications><application class=\"*\" name=\"*\" title=\"*\"><maximized>yes</maximized></application>|g" /home/androidusr/.config/openbox/rc.xml || true
+              sed -i "s|<applications>|<applications><application class=\"*\" name=\"*\" title=\"*\"><maximized>yes</maximized></application>|g" /etc/xdg/openbox/rc.xml || true
+            else
+              cat << "EOF" > /home/androidusr/.config/openbox/rc.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <applications>
+    <application class="*" name="*" title="*">
+      <maximized>yes</maximized>
+    </application>
+  </applications>
+</openbox_config>
+EOF
+            fi
+            chown -R androidusr:androidusr /home/androidusr/.config
             su - androidusr -c "DISPLAY=:0 xhost +" 2>/dev/null || true
             xhost + 2>/dev/null || true
+            su - androidusr -c "DISPLAY=:0 openbox --reconfigure" 2>/dev/null || true
           ' || true
 
-      - name: 3. Tao Link 1-Click, Phong to toan man hinh & Gui DM
+      - name: 3. Tao Link 1-Click, Phong to man hinh & Gui DM
         run: |
           curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
           chmod +x cloudflared
@@ -81,11 +90,12 @@ jobs:
 
           FULL_URL="${TUNNEL_URL}/vnc.html?autoconnect=true&resize=scale"
           echo "================================================================================"
-          echo "🚀 LINK 1-CLICK VAO THANG CLOUD PHONE TOAN MAN HINH:"
+          echo "🚀 LINK 1-CLICK VAO THANG CLOUD PHONE:"
           echo "$FULL_URL"
           echo "================================================================================"
 
-          echo "Dang doi Android Emulator xuat hien de tu dong phong to..."
+          # Cho den khi Emulator khoi dong xong va phong to toan bo man hinh
+          echo "Dang doi Android Emulator xuat hien de tu dong phong to man hinh..."
           for i in {1..90}; do
             WID=$(docker exec ugphone-container bash -c '
               export DISPLAY=:0
@@ -125,7 +135,7 @@ jobs:
                 '{
                   embeds: [{
                     title: "🎉 CLOUD PHONE CỦA BẠN ĐÃ SẴN SÀNG!",
-                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Android Cloud Phone** của bạn đã khởi động thành công và **tự động phóng to toàn màn hình**!\n\n📱 **Hệ điều hành:** Android 9.0 (Free 100%)\n💻 **Khuyên dùng:** Sử dụng trên **PC / Máy tính** sẽ dễ điều khiển nhất\n⚡ **Tốc độ:** Vì là máy ảo miễn phí nên có thể hơi lag nhẹ\n📌 **Lưu ý:** Mục đích chính của Bot là phục vụ Server Zet Store, máy ảo này là tiện ích phụ trải nghiệm thêm!\n\n👉 **Link truy cập 1-Click:**\n" + $url + "\n\n💡 *Mẹo: Nhấn phím F11 trên bàn phím để mở chế độ toàn màn hình tràn viền!*"),
+                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Android Cloud Phone** của bạn đã khởi động và **tự động phóng to màn hình** thành công!\n\n📱 **Hệ điều hành:** Android 9.0 (Free 100%)\n💻 **Khuyên dùng:** Sử dụng trên **PC / Máy tính** sẽ dễ điều khiển hơn điện thoại rất nhiều\n⚡ **Tốc độ:** Vì là máy ảo miễn phí nên có thể hơi lag nhẹ\n📌 **Lưu ý:** Mục đích chính của Bot là phục vụ Server Zet Store, máy ảo này chỉ là tiện ích phụ trải nghiệm thêm!\n\n👉 **Link truy cập 1-Click:**\n" + $url + "\n\n💡 *Mẹo: Nhấn F11 trên bàn phím để mở chế độ toàn màn hình tràn viền!*"),
                     color: 65280,
                     footer: { text: "Zet Store • Tiện ích phụ" }
                   }],
@@ -152,6 +162,7 @@ jobs:
         run: |
           echo "Cloud Phone dang hoat dong on dinh..."
           for i in {1..360}; do
+            # Dinh ky kiem tra va giu cua so luon phong to
             if [ $((i % 5)) -eq 0 ]; then
               docker exec ugphone-container bash -c '
                 export DISPLAY=:0
