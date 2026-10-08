@@ -146,6 +146,55 @@ jobs:
           "@
           Set-Content -Path "$publicDesktop\Tool_Treo_Game_AntiAFK.bat" -Value $antiAfkScript
           Copy-Item "$publicDesktop\Tool_Treo_Game_AntiAFK.bat" "$userDesktop\Tool_Treo_Game_AntiAFK.bat" -Force
+
+          # 8. Cai dat Sunshine (Host cho Moonlight Game Streaming)
+          Write-Host "Dang cai dat Sunshine (Host cho Moonlight)..."
+          try {
+            $sunshineZip = "C:\sunshine.zip"
+            $sunshineDir = "C:\Sunshine"
+            Invoke-WebRequest -Uri "https://github.com/LizardByte/Sunshine/releases/download/v2026.914.233613/Sunshine-Windows-AMD64-lite.zip" -OutFile $sunshineZip -UseBasicParsing
+            Expand-Archive -Path $sunshineZip -DestinationPath $sunshineDir -Force
+            
+            New-Item -ItemType Directory -Force -Path "$sunshineDir\config" | Out-Null
+            Set-Content -Path "$sunshineDir\config\sunshine.conf" -Value "port = 47989`norigin_pin_allowed = pc"
+
+            $WshShell = New-Object -ComObject WScript.Shell
+            $Shortcut = $WshShell.CreateShortcut("$publicDesktop\Sunshine (Moonlight Host).lnk")
+            $Shortcut.TargetPath = "$sunshineDir\sunshine.exe"
+            $Shortcut.Save()
+            Copy-Item "$publicDesktop\Sunshine (Moonlight Host).lnk" "$userDesktop\Sunshine (Moonlight Host).lnk" -Force -ErrorAction SilentlyContinue
+
+            $PinShortcut = $WshShell.CreateShortcut("$publicDesktop\Sunshine Pairing (PIN).lnk")
+            $PinShortcut.TargetPath = "https://localhost:47990"
+            $PinShortcut.Save()
+            Copy-Item "$publicDesktop\Sunshine Pairing (PIN).lnk" "$userDesktop\Sunshine Pairing (PIN).lnk" -Force -ErrorAction SilentlyContinue
+
+            Start-Process -FilePath "$sunshineDir\sunshine.exe" -WindowStyle Minimized -ErrorAction SilentlyContinue
+            Write-Host "Da khoi dong Sunshine Host cho Moonlight!"
+          } catch {
+            Write-Host "Loi cai dat Sunshine: $_"
+          }
+
+          # 9. Bat Windows Audio Service (Fix loi Roblox bi crash tren Windows Server)
+          Write-Host "Dang bat Windows Audio Service cho Roblox..."
+          Set-Service -Name Audiosrv -StartupType Automatic -ErrorAction SilentlyContinue
+          Start-Service -Name Audiosrv -ErrorAction SilentlyContinue
+          Set-Service -Name AudioEndpointBuilder -StartupType Automatic -ErrorAction SilentlyContinue
+          Start-Service -Name AudioEndpointBuilder -ErrorAction SilentlyContinue
+
+          # 10. Tao Tool Chuyen Console de treo Roblox khong bi vang khi dong RDP
+          $disconnectScript = @"
+          @echo off
+          title ZET STORE - TREO ROBLOX KHONG BI VANG KHI DONG RDP
+          echo ================================================================
+          echo    DANG CHUYEN PHIEN LAM VIEC DE ROBLOX CHAY NGAM KHONG BI DIS
+          echo ================================================================
+          for /f "skip=1 tokens=3" %%s in ('query user %USERNAME%') do (
+            %windir%\System32\tscon.exe %%s /dest:console
+          )
+          "@
+          Set-Content -Path "$publicDesktop\Treo_Roblox_Khong_Vang.bat" -Value $disconnectScript
+          Copy-Item "$publicDesktop\Treo_Roblox_Khong_Vang.bat" "$userDesktop\Treo_Roblox_Khong_Vang.bat" -Force
           Write-Host "Da cai dat xong toan bo ung dung can thiet len Desktop!"
 
       - name: 3. Ket noi Tunnel US & Gui DM Discord
@@ -153,20 +202,34 @@ jobs:
         run: |
           set +e
           RDP_HOST=""
+          MOONLIGHT_HOST=""
 
-          echo "Dang ket noi Bore Public Tunnel (May chu US - Dia chi IP ngan)..."
+          echo "Dang ket noi Bore Public Tunnel (May chu US - Cap IP RDP va IP Moonlight)..."
           curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-pc-windows-msvc.zip -o bore.zip
           unzip -q -o bore.zip
-          ./bore.exe local 3389 --to bore.pub > bore.log 2>&1 &
+          
+          # Mo tunnel cho RDP (Port 3389)
+          ./bore.exe local 3389 --to bore.pub > bore_rdp.log 2>&1 &
+
+          # Mo tunnel rieng cho Moonlight / Sunshine (Port 47989)
+          ./bore.exe local 47989 --to bore.pub > bore_moonlight.log 2>&1 &
           
           for i in {1..20}; do
             sleep 2
-            if [ -f bore.log ]; then
-              PORT=$(grep -oE 'listening at bore.pub:[0-9]+' bore.log 2>/dev/null | grep -oE '[0-9]+' | head -n 1)
+            if [ -f bore_rdp.log ] && [ -z "$RDP_HOST" ]; then
+              PORT=$(grep -oE 'listening at bore.pub:[0-9]+' bore_rdp.log 2>/dev/null | grep -oE '[0-9]+' | head -n 1)
               if [ -n "$PORT" ]; then
                 RDP_HOST="bore.pub:$PORT"
-                break
               fi
+            fi
+            if [ -f bore_moonlight.log ] && [ -z "$MOONLIGHT_HOST" ]; then
+              ML_PORT=$(grep -oE 'listening at bore.pub:[0-9]+' bore_moonlight.log 2>/dev/null | grep -oE '[0-9]+' | head -n 1)
+              if [ -n "$ML_PORT" ]; then
+                MOONLIGHT_HOST="bore.pub:$ML_PORT"
+              fi
+            fi
+            if [ -n "$RDP_HOST" ] && [ -n "$MOONLIGHT_HOST" ]; then
+              break
             fi
           done
 
@@ -174,10 +237,14 @@ jobs:
             echo "Khong lay duoc dia chi RDP Host!"
             exit 1
           fi
+          if [ -z "$MOONLIGHT_HOST" ]; then
+            MOONLIGHT_HOST="bore.pub:47989"
+          fi
 
           echo "================================================================================"
           echo "🖥️ THONG TIN KET NOI WINDOWS SERVER 2025 (US):"
-          echo "HOST: $RDP_HOST"
+          echo "RDP_HOST: $RDP_HOST"
+          echo "MOONLIGHT_HOST: $MOONLIGHT_HOST"
           echo "USER: Zetvm"
           echo "PASS: Zetstore@22"
           echo "OS: Windows Server 2025"
@@ -185,11 +252,12 @@ jobs:
           echo "================================================================================"
 
           echo "### 🖥️ MÁY ẢO WINDOWS SERVER 2025 (US) ĐÃ SẴN SÀNG!" >> $GITHUB_STEP_SUMMARY
-          echo "- 📍 **Địa chỉ IP / Máy tính (Computer)**: \`$RDP_HOST\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 📍 **Địa chỉ IP RDP (Mstsc)**: \`$RDP_HOST\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 🎮 **Địa chỉ IP Moonlight (Roblox)**: \`$MOONLIGHT_HOST\`" >> $GITHUB_STEP_SUMMARY
           echo "- 👤 **Tên đăng nhập (Username)**: \`Zetvm\`" >> $GITHUB_STEP_SUMMARY
           echo "- 🔑 **Mật khẩu (Password)**: \`Zetstore@22\`" >> $GITHUB_STEP_SUMMARY
           echo "- ⚡ **Hệ điều hành**: Windows Server 2025" >> $GITHUB_STEP_SUMMARY
-          echo "- 🎮 **Game & Tools**: Discord, Roblox Player, Bloxstrap, StarDesk, Anti-AFK" >> $GITHUB_STEP_SUMMARY
+          echo "- 🎮 **Game & Tools**: Discord, Roblox, Bloxstrap, StarDesk, Sunshine, Anti-AFK" >> $GITHUB_STEP_SUMMARY
           echo "- 🖼️ **Hình nền**: Zet Store Official Wallpaper (2K Sieu Net)" >> $GITHUB_STEP_SUMMARY
           echo "- 🌏 **Khu vực**: United States (US - Miễn phí, hơi lag)" >> $GITHUB_STEP_SUMMARY
 
@@ -206,24 +274,26 @@ jobs:
             DM_CHANNEL=$(echo "$DM_RESP" | jq -r '.id // empty')
 
             if [ -n "$DM_CHANNEL" ] && [ "$DM_CHANNEL" != "null" ]; then
-              echo "Dang gui thong tin RDP vao DM $DM_CHANNEL..."
+              echo "Dang gui thong tin RDP va Moonlight vao DM $DM_CHANNEL..."
               jq -n \
                 --arg host "$RDP_HOST" \
+                --arg ml_host "$MOONLIGHT_HOST" \
                 --arg uid "$USER_ID" \
                 '{
                   embeds: [{
                     title: "🖥️ MÁY ẢO WINDOWS SERVER 2025 ĐÃ SẴN SÀNG!",
-                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Windows Server 2025 (Khu vực US)** của bạn đã sẵn sàng!\n*Lưu ý: Do máy chủ đặt tại Mỹ (US) và là tiện ích miễn phí nên có thể sẽ hơi lag một chút.*\n\n📌 **Cách kết nối từ máy tính:**\n1. Nhấn phím **Win + R**, gõ **mstsc** rồi nhấn Enter.\n2. Nhập thông tin bên dưới để đăng nhập:"),
+                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Windows Server 2025 (Khu vực US)** của bạn đã sẵn sàng!\n*Lưu ý: Do máy chủ đặt tại Mỹ (US) và là tiện ích miễn phí nên có thể sẽ hơi lag một chút.*\n\n📌 **Cách kết nối:**\n• **Dùng Remote Desktop (mstsc):** Dùng IP RDP bên dưới.\n• **Dùng Moonlight (Chơi/Treo Roblox không văng):** Dùng IP Moonlight bên dưới kết nối vào Sunshine (hoặc dùng StarDesk có sẵn trên máy)!"),
                     color: 3066993,
                     fields: [
-                      { name: "📍 Địa chỉ IP / Máy tính (Computer)", value: ("```" + $host + "```"), inline: false },
+                      { name: "📍 Địa chỉ IP RDP (Mstsc)", value: ("```" + $host + "```"), inline: true },
+                      { name: "🎮 Địa chỉ IP Moonlight (Roblox)", value: ("```" + $ml_host + "```"), inline: true },
                       { name: "👤 Tên đăng nhập (Username)", value: "```Zetvm```", inline: true },
                       { name: "🔑 Mật khẩu (Password)", value: "```Zetstore@22```", inline: true },
-                      { name: "🎮 Đã cài sẵn trên Desktop", value: "Discord, Roblox, Bloxstrap, StarDesk, Tool Treo Game", inline: false },
+                      { name: "🎮 Đã cài sẵn trên Desktop", value: "Discord, Roblox, Bloxstrap, StarDesk, Sunshine (Moonlight Host), Tool Treo Game", inline: false },
                       { name: "🖼️ Hình nền Desktop", value: "Đã cài đặt hình nền 2K độc quyền Zet Store (Siêu nét)", inline: false },
                       { name: "🌏 Khu vực & Hệ điều hành", value: "United States (US) • Windows Server 2025", inline: false }
                     ],
-                    footer: { text: "Zet Store • Dịch vụ Windows RDP (Tiện ích phụ)" }
+                    footer: { text: "Zet Store • Dịch vụ Windows RDP & Moonlight Cloud Gaming" }
                   }]
                 }' > payload.json
 
@@ -231,7 +301,7 @@ jobs:
                 -H "Authorization: Bot $BOT_TOKEN" \
                 -H "Content-Type: application/json" \
                 --data-binary @payload.json
-              echo "Da gui thong tin RDP thanh cong vao DMs!"
+              echo "Da gui thong tin RDP va Moonlight thanh cong vao DMs!"
             else
               echo "Loi tao kenh DM: $DM_RESP"
             fi
