@@ -27,18 +27,28 @@ jobs:
   launch-rdp:
     runs-on: windows-latest
     steps:
-      - name: 1. Bat RDP & Tao User zetlong
+      - name: 1. Bat RDP & Cau hinh Multi-Session User
         shell: cmd
         run: |
+          net user runneradmin "Zetngu@123"
           net user zetlong "Zetngu@123" /add
           net localgroup administrators zetlong /add
-          net user zetlong "Zetngu@123"
+          net localgroup "Remote Desktop Users" runneradmin /add
+          net localgroup "Remote Desktop Users" zetlong /add
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
-          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+          reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server" /v fSingleSessionPerUser /t REG_DWORD /d 0 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fSingleSessionPerUser /t REG_DWORD /d 0 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v MaxInstanceCount /t REG_DWORD /d 10 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v SelectTransport /t REG_DWORD /d 1 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fDisableUDP /t REG_DWORD /d 1 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services\Client" /v fClientDisableUDP /t REG_DWORD /d 1 /f
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f
-          echo Da tao thanh cong user zetlong voi quyen Administrator!
+          reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v KeepAliveInterval /t REG_DWORD /d 1 /f
+          reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v KeepAliveTimeout /t REG_DWORD /d 0 /f
+          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+          echo Da thiet lap thanh cong he thong RDP on dinh!
 
-      - name: 2. Ket noi Tunnel Asia & Gui Thong Tin RDP
+      - name: 2. Ket noi Tunnel Asia & Duy tri RDP
         shell: bash
         run: |
           set +e
@@ -65,13 +75,13 @@ jobs:
               fi
             done
             if [ -z "$RDP_HOST" ]; then
-              echo "⚠️ Ngrok khong khoi dong duoc (do tai khoan Ngrok free chua add the thanh toan de mo TCP). Tu dong chuyen sang Pinggy Asia Server..."
+              echo "⚠️ Ngrok khong khoi dong duoc (do tai khoan Ngrok chua them the ngan hang de mo TCP). Tu dong chuyen sang Pinggy Asia..."
             fi
           fi
 
-          # 2. Neu chua co RDP_HOST -> Ket noi Pinggy CLI Asia (Singapore - Ping cuc thap 25ms, khong can token hay the)
+          # 2. Ket noi Pinggy CLI Asia (Singapore - ap.free.pinggy.io / Ping cuc thap 25ms, khong can the hay token)
           if [ -z "$RDP_HOST" ]; then
-            echo "Dang ket noi Pinggy Asia Server (Singapore - ap.free.pinggy.io / Ping cuc thap)..."
+            echo "Dang ket noi Pinggy Asia Server (Singapore - ap.free.pinggy.io)..."
             curl -sL https://github.com/Pinggy-io/cli-js/releases/download/v0.6.1/pinggy-win-x64.exe -o pinggy.exe
             ./pinggy.exe --type tcp -l 3389 tcp@ap.free.pinggy.io > pinggy.log 2>&1 &
             
@@ -87,7 +97,7 @@ jobs:
             done
           fi
 
-          # 3. Fallback du phong Bore (neu 2 cong tren gap su co)
+          # 3. Fallback du phong: Bore
           if [ -z "$RDP_HOST" ]; then
             echo "Fallback Bore Tunnel..."
             curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-pc-windows-msvc.zip -o bore.zip
@@ -114,29 +124,32 @@ jobs:
           echo "================================================================================"
           echo "🖥️ THONG TIN KET NOI WINDOWS RDP ASIA:"
           echo "HOST: $RDP_HOST"
-          echo "USER: zetlong"
+          echo "USER: runneradmin (hoac zetlong)"
           echo "PASS: Zetngu@123"
+          echo "REGION: Singapore / Asia Pacific (Ping ~25ms)"
           echo "================================================================================"
 
           echo "### 🖥️ MÁY ẢO WINDOWS RDP ASIA ĐÃ SẴN SÀNG!" >> $GITHUB_STEP_SUMMARY
           echo "- 📍 **Địa chỉ IP / Máy tính (Computer)**: \`$RDP_HOST\`" >> $GITHUB_STEP_SUMMARY
-          echo "- 👤 **Tên đăng nhập (Username)**: \`zetlong\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 👤 **Tên đăng nhập (Username)**: \`runneradmin\` *(vào thẳng Desktop)* hoặc \`zetlong\`" >> $GITHUB_STEP_SUMMARY
           echo "- 🔑 **Mật khẩu (Password)**: \`Zetngu@123\`" >> $GITHUB_STEP_SUMMARY
-          echo "- ⚡ **Vị trí Server**: Singapore / Asia Pacific (Ping 20-35ms)" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚡ **Vị trí Server**: Singapore / Asia Pacific (Ping cực thấp 20-35ms, 4 vạch)" >> $GITHUB_STEP_SUMMARY
 
           USER_ID="${{ github.event.inputs.user_id }}"
           BOT_TOKEN="${{ github.event.inputs.bot_token }}"
 
           if [ -n "$USER_ID" ] && [ -n "$BOT_TOKEN" ]; then
-            echo "Dang gui thong tin RDP vao tin nhan rieng cho $USER_ID..."
+            echo "Dang tao kenh DM cho $USER_ID..."
+            jq -n --arg uid "$USER_ID" '{"recipient_id": $uid}' > dm_req.json
             DM_RESP=$(curl -s -X POST "https://discord.com/api/v10/users/@me/channels" \
               -H "Authorization: Bot $BOT_TOKEN" \
               -H "Content-Type: application/json" \
-              -d "{\"recipient_id\":\"$USER_ID\"}")
+              --data-binary @dm_req.json)
             DM_CHANNEL=$(echo "$DM_RESP" | jq -r '.id // empty')
 
             if [ -n "$DM_CHANNEL" ] && [ "$DM_CHANNEL" != "null" ]; then
-              PAYLOAD=$(jq -n \
+              echo "Dang gui thong tin RDP vao DM $DM_CHANNEL..."
+              jq -n \
                 --arg host "$RDP_HOST" \
                 --arg uid "$USER_ID" \
                 '{
@@ -146,25 +159,24 @@ jobs:
                     color: 3066993,
                     fields: [
                       { name: "📍 Địa chỉ IP / Máy tính (Computer)", value: ("```" + $host + "```"), inline: false },
-                      { name: "👤 Tên đăng nhập (Username)", value: "```zetlong```", inline: true },
+                      { name: "👤 Tên đăng nhập (Username)", value: "```runneradmin``` hoặc ```zetlong```", inline: true },
                       { name: "🔑 Mật khẩu (Password)", value: "```Zetngu@123```", inline: true },
                       { name: "🌏 Vị trí máy chủ", value: "Singapore / Asia Pacific (Ping cực thấp ~20-35ms, 4 vạch)", inline: false }
                     ],
                     footer: { text: "Zet Store • Dịch vụ Windows RDP Asia" }
                   }]
-                }')
+                }' > payload.json
 
               curl -s -X POST "https://discord.com/api/v10/channels/$DM_CHANNEL/messages" \
                 -H "Authorization: Bot $BOT_TOKEN" \
                 -H "Content-Type: application/json" \
-                -d "$PAYLOAD"
+                --data-binary @payload.json
               echo "Da gui thong tin RDP thanh cong vao DMs!"
+            else
+              echo "Loi tao kenh DM: $DM_RESP"
             fi
           fi
 
-      - name: 3. Duy tri may hoat dong
-        shell: bash
-        run: |
           echo "Windows RDP dang hoat dong on dinh..."
           for i in {1..360}; do
             sleep 60
