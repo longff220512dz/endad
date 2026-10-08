@@ -25,16 +25,14 @@ on:
 
 jobs:
   launch-rdp:
-    runs-on: windows-latest
+    runs-on: windows-2025
     steps:
-      - name: 1. Bat RDP & Cau hinh Multi-Session User
+      - name: 1. Bat RDP & Cau hinh User Zetvm (Windows Server 2025)
         shell: cmd
         run: |
-          net user runneradmin "Zetngu@123"
-          net user zetlong "Zetngu@123" /add
-          net localgroup administrators zetlong /add
-          net localgroup "Remote Desktop Users" runneradmin /add
-          net localgroup "Remote Desktop Users" zetlong /add
+          net user Zetvm "Zetstore@22" /add
+          net localgroup administrators Zetvm /add
+          net localgroup "Remote Desktop Users" Zetvm /add
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server" /v fSingleSessionPerUser /t REG_DWORD /d 0 /f
           reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fSingleSessionPerUser /t REG_DWORD /d 0 /f
@@ -45,8 +43,15 @@ jobs:
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v KeepAliveInterval /t REG_DWORD /d 1 /f
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v KeepAliveTimeout /t REG_DWORD /d 0 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fNoRemoteDesktopWallpaper /t REG_DWORD /d 1 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fDisableTheme /t REG_DWORD /d 1 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fEnableWddmDriver /t REG_DWORD /d 1 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v AVC444ModePreferred /t REG_DWORD /d 1 /f
+          reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations" /v DWMFRAMEINTERVAL /t REG_DWORD /d 15 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" /v NetworkThrottlingIndex /t REG_DWORD /d 4294967295 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" /v SystemResponsiveness /t REG_DWORD /d 0 /f
           netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
-          echo Da thiet lap thanh cong he thong RDP on dinh!
+          echo Da tao thanh cong user Zetvm va toi uu hoa RDP 60 FPS cho Windows Server 2025!
 
       - name: 2. Ket noi Tunnel Asia & Duy tri RDP
         shell: bash
@@ -122,18 +127,19 @@ jobs:
           fi
 
           echo "================================================================================"
-          echo "🖥️ THONG TIN KET NOI WINDOWS RDP ASIA:"
+          echo "🖥️ THONG TIN KET NOI WINDOWS SERVER 2025 RDP ASIA:"
           echo "HOST: $RDP_HOST"
-          echo "USER: runneradmin (hoac zetlong)"
-          echo "PASS: Zetngu@123"
-          echo "REGION: Singapore / Asia Pacific (Ping ~25ms)"
+          echo "USER: Zetvm"
+          echo "PASS: Zetstore@22"
+          echo "OS: Windows Server 2025 Datacenter"
           echo "================================================================================"
 
-          echo "### 🖥️ MÁY ẢO WINDOWS RDP ASIA ĐÃ SẴN SÀNG!" >> $GITHUB_STEP_SUMMARY
+          echo "### 🖥️ MÁY ẢO WINDOWS SERVER 2025 ĐÃ SẴN SÀNG!" >> $GITHUB_STEP_SUMMARY
           echo "- 📍 **Địa chỉ IP / Máy tính (Computer)**: \`$RDP_HOST\`" >> $GITHUB_STEP_SUMMARY
-          echo "- 👤 **Tên đăng nhập (Username)**: \`runneradmin\` *(vào thẳng Desktop)* hoặc \`zetlong\`" >> $GITHUB_STEP_SUMMARY
-          echo "- 🔑 **Mật khẩu (Password)**: \`Zetngu@123\`" >> $GITHUB_STEP_SUMMARY
-          echo "- ⚡ **Vị trí Server**: Singapore / Asia Pacific (Ping cực thấp 20-35ms, 4 vạch)" >> $GITHUB_STEP_SUMMARY
+          echo "- 👤 **Tên đăng nhập (Username)**: \`Zetvm\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔑 **Mật khẩu (Password)**: \`Zetstore@22\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 💻 **Hệ điều hành**: Windows Server 2025 Datacenter (Tối ưu 60 FPS)" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚡ **Vị trí Server**: Singapore / Asia Pacific (Ping cực thấp 20-35ms)" >> $GITHUB_STEP_SUMMARY
 
           USER_ID="${{ github.event.inputs.user_id }}"
           BOT_TOKEN="${{ github.event.inputs.bot_token }}"
@@ -154,16 +160,17 @@ jobs:
                 --arg uid "$USER_ID" \
                 '{
                   embeds: [{
-                    title: "🖥️ MÁY ẢO WINDOWS RDP ASIA ĐÃ SẴN SÀNG!",
-                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Windows Server 2022** của bạn đã khởi động thành công với vị trí **Server Singapore (Asia Pacific)** cho độ trễ cực thấp!\n\n📌 **Cách kết nối từ máy tính:**\n1. Nhấn phím **Win + R**, gõ **mstsc** rồi nhấn Enter.\n2. Nhập thông tin bên dưới để đăng nhập:"),
+                    title: "🖥️ MÁY ẢO WINDOWS SERVER 2025 ĐÃ SẴN SÀNG!",
+                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Windows Server 2025** của bạn đã khởi động thành công với cấu hình tối ưu độ trễ thấp & 60 FPS siêu mượt!\n\n📌 **Cách kết nối từ máy tính:**\n1. Nhấn phím **Win + R**, gõ **mstsc** rồi nhấn Enter.\n2. Nhập thông tin bên dưới để đăng nhập:"),
                     color: 3066993,
                     fields: [
                       { name: "📍 Địa chỉ IP / Máy tính (Computer)", value: ("```" + $host + "```"), inline: false },
-                      { name: "👤 Tên đăng nhập (Username)", value: "```runneradmin``` hoặc ```zetlong```", inline: true },
-                      { name: "🔑 Mật khẩu (Password)", value: "```Zetngu@123```", inline: true },
-                      { name: "🌏 Vị trí máy chủ", value: "Singapore / Asia Pacific (Ping cực thấp ~20-35ms, 4 vạch)", inline: false }
+                      { name: "👤 Tên đăng nhập (Username)", value: "```Zetvm```", inline: true },
+                      { name: "🔑 Mật khẩu (Password)", value: "```Zetstore@22```", inline: true },
+                      { name: "💻 Hệ điều hành", value: "Windows Server 2025 (Tối ưu 60 FPS)", inline: false },
+                      { name: "🌏 Vị trí máy chủ", value: "Singapore / Asia Pacific (Ping cực thấp ~20-35ms)", inline: false }
                     ],
-                    footer: { text: "Zet Store • Dịch vụ Windows RDP Asia" }
+                    footer: { text: "Zet Store • Dịch vụ Windows Server 2025 RDP Asia" }
                   }]
                 }' > payload.json
 
@@ -177,7 +184,7 @@ jobs:
             fi
           fi
 
-          echo "Windows RDP dang hoat dong on dinh..."
+          echo "Windows Server 2025 RDP dang hoat dong on dinh..."
           for i in {1..360}; do
             sleep 60
             echo "May RDP da hoat dong duoc $i phut..."
