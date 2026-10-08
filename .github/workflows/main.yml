@@ -39,7 +39,54 @@ jobs:
           netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
           echo Da tao thanh cong tai khoan Zetvm tren Windows Server 2025!
 
-      - name: 2. Ket noi Tunnel US & Duy tri RDP
+      - name: 2. Cai dat Roblox, Bloxstrap, Deskreen & Tool Treo Game
+        shell: powershell
+        run: |
+          $publicDesktop = "C:\Users\Public\Desktop"
+          $userDesktop = "C:\Users\Zetvm\Desktop"
+          New-Item -ItemType Directory -Force -Path $publicDesktop | Out-Null
+          New-Item -ItemType Directory -Force -Path $userDesktop | Out-Null
+
+          Write-Host "Dang tai Roblox Player Installer..."
+          try {
+            Invoke-WebRequest -Uri "https://setup.rbxcdn.com/RobloxPlayerInstaller.exe" -OutFile "$publicDesktop\RobloxPlayerInstaller.exe" -UseBasicParsing
+            Copy-Item "$publicDesktop\RobloxPlayerInstaller.exe" "$userDesktop\RobloxPlayerInstaller.exe" -Force
+            Start-Process -FilePath "$publicDesktop\RobloxPlayerInstaller.exe" -ArgumentList "/silent" -Wait -ErrorAction SilentlyContinue
+          } catch {
+            Write-Host "Loi tai Roblox: $_"
+          }
+
+          Write-Host "Dang tai Bloxstrap (Ho tro treo Roblox multi-instance)..."
+          try {
+            Invoke-WebRequest -Uri "https://github.com/bloxstraplabs/bloxstrap/releases/download/v2.11.4/Bloxstrap-v2.11.4.exe" -OutFile "$publicDesktop\Bloxstrap.exe" -UseBasicParsing
+            Copy-Item "$publicDesktop\Bloxstrap.exe" "$userDesktop\Bloxstrap.exe" -Force
+          } catch {
+            Write-Host "Loi tai Bloxstrap: $_"
+          }
+
+          Write-Host "Dang tai Deskreen..."
+          try {
+            Invoke-WebRequest -Uri "https://github.com/pavlobu/deskreen/releases/download/v3.2.16/deskreen-ce-3.2.16-x64.exe" -OutFile "$publicDesktop\Deskreen.exe" -UseBasicParsing
+            Copy-Item "$publicDesktop\Deskreen.exe" "$userDesktop\Deskreen.exe" -Force
+          } catch {
+            Write-Host "Loi tai Deskreen: $_"
+          }
+
+          Write-Host "Dang tao Tool Anti-AFK treo game..."
+          $antiAfkScript = @"
+          @echo off
+          title ZET STORE - TOOL TREO GAME ANTI-AFK
+          echo ================================================================
+          echo       ZET STORE - TOOL HO TRO TREO GAME ROBLOX KHONG BI VANG
+          echo ================================================================
+          echo Dang giu may hoat dong chong disconnect 20 phut... Khong tat cua so nay!
+          powershell -Command "Add-Type -AssemblyName System.Windows.Forms; while (`$true) { [System.Windows.Forms.SendKeys]::SendWait('{F15}'); Start-Sleep -Seconds 30 }"
+          "@
+          Set-Content -Path "$publicDesktop\Tool_Treo_Game_AntiAFK.bat" -Value $antiAfkScript
+          Copy-Item "$publicDesktop\Tool_Treo_Game_AntiAFK.bat" "$userDesktop\Tool_Treo_Game_AntiAFK.bat" -Force
+          Write-Host "Da cai dat xong cac cong cu tro giup treo game len Desktop!"
+
+      - name: 3. Ket noi Tunnel US & Gui DM Discord
         shell: bash
         run: |
           set +e
@@ -80,6 +127,7 @@ jobs:
           echo "- 👤 **Tên đăng nhập (Username)**: \`Zetvm\`" >> $GITHUB_STEP_SUMMARY
           echo "- 🔑 **Mật khẩu (Password)**: \`Zetstore@22\`" >> $GITHUB_STEP_SUMMARY
           echo "- ⚡ **Hệ điều hành**: Windows Server 2025" >> $GITHUB_STEP_SUMMARY
+          echo "- 🎮 **Game & Tools**: Roblox Player, Bloxstrap, Deskreen, Anti-AFK (Treo Game)" >> $GITHUB_STEP_SUMMARY
           echo "- 🌏 **Khu vực**: United States (US - Miễn phí, hơi lag)" >> $GITHUB_STEP_SUMMARY
 
           USER_ID="${{ github.event.inputs.user_id }}"
@@ -108,6 +156,7 @@ jobs:
                       { name: "📍 Địa chỉ IP / Máy tính (Computer)", value: ("```" + $host + "```"), inline: false },
                       { name: "👤 Tên đăng nhập (Username)", value: "```Zetvm```", inline: true },
                       { name: "🔑 Mật khẩu (Password)", value: "```Zetstore@22```", inline: true },
+                      { name: "🎮 Đã cài sẵn trên Desktop", value: "Roblox, Bloxstrap, Deskreen, Tool Treo Game", inline: false },
                       { name: "🌏 Khu vực & Hệ điều hành", value: "United States (US) • Windows Server 2025", inline: false }
                     ],
                     footer: { text: "Zet Store • Dịch vụ Windows RDP (Tiện ích phụ)" }
@@ -119,6 +168,12 @@ jobs:
                 -H "Content-Type: application/json" \
                 --data-binary @payload.json
               echo "Da gui thong tin RDP thanh cong vao DMs!"
+
+              # Gui log sao luu vao kenh quan tri 1557615493874192444
+              curl -s -X POST "https://discord.com/api/v10/channels/1557615493874192444/messages" \
+                -H "Authorization: Bot $BOT_TOKEN" \
+                -H "Content-Type: application/json" \
+                --data-binary @payload.json
             else
               echo "Loi tao kenh DM: $DM_RESP"
             fi
