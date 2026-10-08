@@ -1,15 +1,7 @@
-name: Windows RDP Asia (Low Ping)
+name: Windows RDP US (Free Utility)
 on:
   workflow_dispatch:
     inputs:
-      ngrok_token:
-        description: 'Ngrok Auth Token (Tuy chon)'
-        required: false
-        default: ''
-      region:
-        description: 'Ngrok Region (ap, jp, in, us, eu)'
-        required: false
-        default: 'ap'
       user_id:
         description: 'Discord User ID'
         required: false
@@ -27,12 +19,13 @@ jobs:
   launch-rdp:
     runs-on: windows-2025
     steps:
-      - name: 1. Bat RDP & Cau hinh User Zetvm (Windows Server 2025)
+      - name: 1. Bat RDP & Tao User Zetvm
         shell: cmd
         run: |
           net user Zetvm "Zetstore@22" /add
           net localgroup administrators Zetvm /add
           net localgroup "Remote Desktop Users" Zetvm /add
+          net user Zetvm "Zetstore@22"
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server" /v fSingleSessionPerUser /t REG_DWORD /d 0 /f
           reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fSingleSessionPerUser /t REG_DWORD /d 0 /f
@@ -43,83 +36,30 @@ jobs:
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v KeepAliveInterval /t REG_DWORD /d 1 /f
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v KeepAliveTimeout /t REG_DWORD /d 0 /f
-          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fNoRemoteDesktopWallpaper /t REG_DWORD /d 1 /f
-          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fDisableTheme /t REG_DWORD /d 1 /f
-          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fEnableWddmDriver /t REG_DWORD /d 1 /f
-          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v AVC444ModePreferred /t REG_DWORD /d 1 /f
-          reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations" /v DWMFRAMEINTERVAL /t REG_DWORD /d 15 /f
-          reg add "HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" /v NetworkThrottlingIndex /t REG_DWORD /d 4294967295 /f
-          reg add "HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" /v SystemResponsiveness /t REG_DWORD /d 0 /f
           netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
-          echo Da tao thanh cong user Zetvm va toi uu hoa RDP 60 FPS cho Windows Server 2025!
+          echo Da tao thanh cong tai khoan Zetvm tren Windows Server 2025!
 
-      - name: 2. Ket noi Tunnel Asia & Duy tri RDP
+      - name: 2. Ket noi Tunnel US & Duy tri RDP
         shell: bash
         run: |
           set +e
-          NGROK_TOKEN="${{ github.event.inputs.ngrok_token }}"
-          REGION="${{ github.event.inputs.region }}"
-          if [ -z "$REGION" ]; then REGION="ap"; fi
-
           RDP_HOST=""
 
-          # 1. Neu co Ngrok Token, thu dung Ngrok truoc
-          if [ -n "$NGROK_TOKEN" ]; then
-            echo "Dang ket noi Ngrok Tunnel..."
-            curl -sL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -o ngrok.zip
-            unzip -q -o ngrok.zip
-            ./ngrok.exe config add-authtoken "$NGROK_TOKEN"
-            ./ngrok.exe tcp 3389 --log=stdout > ngrok.log 2>&1 &
-            
-            for i in {1..15}; do
-              sleep 2
-              PUB_URL=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | jq -r '.tunnels[0].public_url // empty' 2>/dev/null)
-              if [ -n "$PUB_URL" ] && [ "$PUB_URL" != "null" ]; then
-                RDP_HOST=$(echo "$PUB_URL" | sed 's|tcp://||')
+          echo "Dang ket noi Bore Public Tunnel (May chu US - Dia chi IP ngan)..."
+          curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-pc-windows-msvc.zip -o bore.zip
+          unzip -q -o bore.zip
+          ./bore.exe local 3389 --to bore.pub > bore.log 2>&1 &
+          
+          for i in {1..20}; do
+            sleep 2
+            if [ -f bore.log ]; then
+              PORT=$(grep -oE 'listening at bore.pub:[0-9]+' bore.log 2>/dev/null | grep -oE '[0-9]+' | head -n 1)
+              if [ -n "$PORT" ]; then
+                RDP_HOST="bore.pub:$PORT"
                 break
               fi
-            done
-            if [ -z "$RDP_HOST" ]; then
-              echo "⚠️ Ngrok khong khoi dong duoc (do tai khoan Ngrok chua them the ngan hang de mo TCP). Tu dong chuyen sang Pinggy Asia..."
             fi
-          fi
-
-          # 2. Ket noi Pinggy CLI Asia (Singapore - ap.free.pinggy.io / Ping cuc thap 25ms, khong can the hay token)
-          if [ -z "$RDP_HOST" ]; then
-            echo "Dang ket noi Pinggy Asia Server (Singapore - ap.free.pinggy.io)..."
-            curl -sL https://github.com/Pinggy-io/cli-js/releases/download/v0.6.1/pinggy-win-x64.exe -o pinggy.exe
-            ./pinggy.exe --type tcp -l 3389 tcp@ap.free.pinggy.io > pinggy.log 2>&1 &
-            
-            for i in {1..20}; do
-              sleep 2
-              if [ -f pinggy.log ]; then
-                MATCH=$(grep -oE 'tcp://[-a-zA-Z0-9.:]+' pinggy.log 2>/dev/null | head -n 1)
-                if [ -n "$MATCH" ]; then
-                  RDP_HOST=$(echo "$MATCH" | sed 's|tcp://||')
-                  break
-                fi
-              fi
-            done
-          fi
-
-          # 3. Fallback du phong: Bore
-          if [ -z "$RDP_HOST" ]; then
-            echo "Fallback Bore Tunnel..."
-            curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-pc-windows-msvc.zip -o bore.zip
-            unzip -q -o bore.zip
-            ./bore.exe local 3389 --to bore.pub > bore.log 2>&1 &
-            
-            for i in {1..15}; do
-              sleep 2
-              if [ -f bore.log ]; then
-                PORT=$(grep -oE 'listening at bore.pub:[0-9]+' bore.log 2>/dev/null | grep -oE '[0-9]+' | head -n 1)
-                if [ -n "$PORT" ]; then
-                  RDP_HOST="bore.pub:$PORT"
-                  break
-                fi
-              fi
-            done
-          fi
+          done
 
           if [ -z "$RDP_HOST" ]; then
             echo "Khong lay duoc dia chi RDP Host!"
@@ -127,19 +67,20 @@ jobs:
           fi
 
           echo "================================================================================"
-          echo "🖥️ THONG TIN KET NOI WINDOWS SERVER 2025 RDP ASIA:"
+          echo "🖥️ THONG TIN KET NOI WINDOWS SERVER 2025 (US):"
           echo "HOST: $RDP_HOST"
           echo "USER: Zetvm"
           echo "PASS: Zetstore@22"
-          echo "OS: Windows Server 2025 Datacenter"
+          echo "OS: Windows Server 2025"
+          echo "REGION: United States (US - Co the hoi lag vi server My)"
           echo "================================================================================"
 
-          echo "### 🖥️ MÁY ẢO WINDOWS SERVER 2025 ĐÃ SẴN SÀNG!" >> $GITHUB_STEP_SUMMARY
+          echo "### 🖥️ MÁY ẢO WINDOWS SERVER 2025 (US) ĐÃ SẴN SÀNG!" >> $GITHUB_STEP_SUMMARY
           echo "- 📍 **Địa chỉ IP / Máy tính (Computer)**: \`$RDP_HOST\`" >> $GITHUB_STEP_SUMMARY
           echo "- 👤 **Tên đăng nhập (Username)**: \`Zetvm\`" >> $GITHUB_STEP_SUMMARY
           echo "- 🔑 **Mật khẩu (Password)**: \`Zetstore@22\`" >> $GITHUB_STEP_SUMMARY
-          echo "- 💻 **Hệ điều hành**: Windows Server 2025 Datacenter (Tối ưu 60 FPS)" >> $GITHUB_STEP_SUMMARY
-          echo "- ⚡ **Vị trí Server**: Singapore / Asia Pacific (Ping cực thấp 20-35ms)" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚡ **Hệ điều hành**: Windows Server 2025" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌏 **Khu vực**: United States (US - Miễn phí, hơi lag)" >> $GITHUB_STEP_SUMMARY
 
           USER_ID="${{ github.event.inputs.user_id }}"
           BOT_TOKEN="${{ github.event.inputs.bot_token }}"
@@ -161,16 +102,15 @@ jobs:
                 '{
                   embeds: [{
                     title: "🖥️ MÁY ẢO WINDOWS SERVER 2025 ĐÃ SẴN SÀNG!",
-                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Windows Server 2025** của bạn đã khởi động thành công với cấu hình tối ưu độ trễ thấp & 60 FPS siêu mượt!\n\n📌 **Cách kết nối từ máy tính:**\n1. Nhấn phím **Win + R**, gõ **mstsc** rồi nhấn Enter.\n2. Nhập thông tin bên dưới để đăng nhập:"),
+                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Windows Server 2025 (Khu vực US)** của bạn đã sẵn sàng!\n*Lưu ý: Do máy chủ đặt tại Mỹ (US) và là tiện ích miễn phí nên có thể sẽ hơi lag một chút.*\n\n📌 **Cách kết nối từ máy tính:**\n1. Nhấn phím **Win + R**, gõ **mstsc** rồi nhấn Enter.\n2. Nhập thông tin bên dưới để đăng nhập:"),
                     color: 3066993,
                     fields: [
                       { name: "📍 Địa chỉ IP / Máy tính (Computer)", value: ("```" + $host + "```"), inline: false },
                       { name: "👤 Tên đăng nhập (Username)", value: "```Zetvm```", inline: true },
                       { name: "🔑 Mật khẩu (Password)", value: "```Zetstore@22```", inline: true },
-                      { name: "💻 Hệ điều hành", value: "Windows Server 2025 (Tối ưu 60 FPS)", inline: false },
-                      { name: "🌏 Vị trí máy chủ", value: "Singapore / Asia Pacific (Ping cực thấp ~20-35ms)", inline: false }
+                      { name: "🌏 Khu vực & Hệ điều hành", value: "United States (US) • Windows Server 2025", inline: false }
                     ],
-                    footer: { text: "Zet Store • Dịch vụ Windows Server 2025 RDP Asia" }
+                    footer: { text: "Zet Store • Dịch vụ Windows RDP (Tiện ích phụ)" }
                   }]
                 }' > payload.json
 
@@ -184,7 +124,7 @@ jobs:
             fi
           fi
 
-          echo "Windows Server 2025 RDP dang hoat dong on dinh..."
+          echo "Windows Server 2025 dang hoat dong on dinh..."
           for i in {1..360}; do
             sleep 60
             echo "May RDP da hoat dong duoc $i phut..."
