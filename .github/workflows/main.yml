@@ -36,10 +36,16 @@ jobs:
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v KeepAliveInterval /t REG_DWORD /d 1 /f
           reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v KeepAliveTimeout /t REG_DWORD /d 0 /f
+          rem Bat 32-bit True Color va Font Smoothing tren RDP cho ro net tuyet doi
+          reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v ColorDepth /t REG_DWORD /d 4 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v ColorDepth /t REG_DWORD /d 4 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fAllowDesktopComposition /t REG_DWORD /d 1 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fAllowFontSmoothing /t REG_DWORD /d 1 /f
+          reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows NT\Terminal Services" /v fDisableRemoteEffects /t REG_DWORD /d 0 /f
           netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
           echo Da tao thanh cong tai khoan Zetvm tren Windows Server 2025!
 
-      - name: 2. Cai dat Hinh Nen Zet Store, Discord, Roblox, Bloxstrap & StarDesk
+      - name: 2. Cai dat Hinh Nen Zet Store 2K Sieu Net, Discord, Roblox, Bloxstrap & StarDesk
         shell: powershell
         run: |
           $publicDesktop = "C:\Users\Public\Desktop"
@@ -51,31 +57,40 @@ jobs:
           Write-Host "Dang don dep shortcut rac tren Desktop..."
           Get-ChildItem -Path $publicDesktop, $userDesktop -Recurse -Include *.lnk, *.url -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 
-          # 2. Cai dat Hinh Nen Zet Store
-          Write-Host "Dang cai dat Hinh Nen Zet Store..."
+          # 2. Cai dat Hinh Nen Zet Store 2K Sieu Net (Khong bi mo)
+          Write-Host "Dang cai dat Hinh Nen Zet Store 2K Sieu Net..."
           try {
-            $wpPath = "C:\wallpaper.jpg"
-            Invoke-WebRequest -Uri "https://files.catbox.moe/d4u6d7.jpg" -OutFile $wpPath -UseBasicParsing
+            $wpJpg = "C:\wallpaper.jpg"
+            $wpPng = "C:\wallpaper.png"
+            Invoke-WebRequest -Uri "https://files.catbox.moe/gom3qu.jpg" -OutFile $wpJpg -UseBasicParsing
+            Invoke-WebRequest -Uri "https://files.catbox.moe/izsqju.png" -OutFile $wpPng -UseBasicParsing
             
-            # Ghi de hinh nen he thong
+            # Ghi de hinh nen he thong img0.jpg voi ban 2K chat luong cao
             takeown /f "C:\Windows\Web\Wallpaper\Windows\img0.jpg" /a 2>$null
             icacls "C:\Windows\Web\Wallpaper\Windows\img0.jpg" /grant Administrators:F 2>$null
-            Copy-Item $wpPath "C:\Windows\Web\Wallpaper\Windows\img0.jpg" -Force -ErrorAction SilentlyContinue
+            Copy-Item $wpJpg "C:\Windows\Web\Wallpaper\Windows\img0.jpg" -Force -ErrorAction SilentlyContinue
 
-            # Registry cai dat hinh nen cho User va Default User
-            reg add "HKEY_CURRENT_USER\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "$wpPath" /f
+            # Vo hieu hoa tinh nang nen anh JPEG cua Windows (Giu nguyen 100% chat luong goc, khong bi mo)
+            reg add "HKEY_CURRENT_USER\Control Panel\Desktop" /v JPEGImportQuality /t REG_DWORD /d 100 /f
+            reg add "HKEY_CURRENT_USER\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "$wpPng" /f
             reg add "HKEY_CURRENT_USER\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d "10" /f
             reg add "HKEY_CURRENT_USER\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d "0" /f
-            reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows\Personalization" /v LockScreenImage /t REG_SZ /d "$wpPath" /f
-            reg add "HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\PersonalizationCSP" /v DesktopImagePath /t REG_SZ /d "$wpPath" /f
+            reg add "HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Windows\Personalization" /v LockScreenImage /t REG_SZ /d "$wpPng" /f
+            reg add "HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\PersonalizationCSP" /v DesktopImagePath /t REG_SZ /d "$wpPng" /f
 
+            # Cau hinh cho ca Default User (User moi tao Zetvm khi dang nhap)
             reg load "HKU\DefaultUser" "C:\Users\Default\NTUSER.DAT" 2>$null
-            reg add "HKU\DefaultUser\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "$wpPath" /f
+            reg add "HKU\DefaultUser\Control Panel\Desktop" /v JPEGImportQuality /t REG_DWORD /d 100 /f
+            reg add "HKU\DefaultUser\Control Panel\Desktop" /v Wallpaper /t REG_SZ /d "$wpPng" /f
             reg add "HKU\DefaultUser\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d "10" /f
             reg add "HKU\DefaultUser\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d "0" /f
             reg unload "HKU\DefaultUser" 2>$null
+
+            # Bat Che do lam min phong chu ClearType va Do phan giai cao cho RDP
+            reg add "HKEY_CURRENT_USER\Control Panel\Desktop" /v FontSmoothing /t REG_SZ /d "2" /f
+            reg add "HKEY_CURRENT_USER\Control Panel\Desktop" /v FontSmoothingType /t REG_DWORD /d 2 /f
             rundll32.exe user32.dll,UpdatePerUserSystemParameters 1, True
-            Write-Host "Da cai dat Hinh Nen Zet Store thanh cong!"
+            Write-Host "Da cai dat Hinh Nen Zet Store 2K Sieu Net thanh cong!"
           } catch {
             Write-Host "Loi cai dat hinh nen: $_"
           }
@@ -175,7 +190,7 @@ jobs:
           echo "- 🔑 **Mật khẩu (Password)**: \`Zetstore@22\`" >> $GITHUB_STEP_SUMMARY
           echo "- ⚡ **Hệ điều hành**: Windows Server 2025" >> $GITHUB_STEP_SUMMARY
           echo "- 🎮 **Game & Tools**: Discord, Roblox Player, Bloxstrap, StarDesk, Anti-AFK" >> $GITHUB_STEP_SUMMARY
-          echo "- 🖼️ **Hình nền**: Zet Store Official Wallpaper" >> $GITHUB_STEP_SUMMARY
+          echo "- 🖼️ **Hình nền**: Zet Store Official Wallpaper (2K Sieu Net)" >> $GITHUB_STEP_SUMMARY
           echo "- 🌏 **Khu vực**: United States (US - Miễn phí, hơi lag)" >> $GITHUB_STEP_SUMMARY
 
           USER_ID="${{ github.event.inputs.user_id }}"
@@ -205,7 +220,7 @@ jobs:
                       { name: "👤 Tên đăng nhập (Username)", value: "```Zetvm```", inline: true },
                       { name: "🔑 Mật khẩu (Password)", value: "```Zetstore@22```", inline: true },
                       { name: "🎮 Đã cài sẵn trên Desktop", value: "Discord, Roblox, Bloxstrap, StarDesk, Tool Treo Game", inline: false },
-                      { name: "🖼️ Hình nền Desktop", value: "Đã cài đặt hình nền độc quyền Zet Store", inline: false },
+                      { name: "🖼️ Hình nền Desktop", value: "Đã cài đặt hình nền 2K độc quyền Zet Store (Siêu nét)", inline: false },
                       { name: "🌏 Khu vực & Hệ điều hành", value: "United States (US) • Windows Server 2025", inline: false }
                     ],
                     footer: { text: "Zet Store • Dịch vụ Windows RDP (Tiện ích phụ)" }
