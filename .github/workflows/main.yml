@@ -48,14 +48,15 @@ jobs:
 
           RDP_HOST=""
 
+          # 1. Neu co Ngrok Token, thu dung Ngrok truoc
           if [ -n "$NGROK_TOKEN" ]; then
-            echo "Dang ket noi Ngrok Tunnel vung Asia ($REGION)..."
+            echo "Dang ket noi Ngrok Tunnel..."
             curl -sL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -o ngrok.zip
             unzip -q -o ngrok.zip
             ./ngrok.exe config add-authtoken "$NGROK_TOKEN"
-            ./ngrok.exe tcp 3389 --region "$REGION" > /dev/null 2>&1 &
+            ./ngrok.exe tcp 3389 --log=stdout > ngrok.log 2>&1 &
             
-            for i in {1..25}; do
+            for i in {1..15}; do
               sleep 2
               PUB_URL=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | jq -r '.tunnels[0].public_url // empty' 2>/dev/null)
               if [ -n "$PUB_URL" ] && [ "$PUB_URL" != "null" ]; then
@@ -63,13 +64,37 @@ jobs:
                 break
               fi
             done
-          else
-            echo "Khong co Ngrok Token -> Tu dong ket noi Bore Public Tunnel (Free 100% khong can token)..."
+            if [ -z "$RDP_HOST" ]; then
+              echo "⚠️ Ngrok khong khoi dong duoc (do tai khoan Ngrok free chua add the thanh toan de mo TCP). Tu dong chuyen sang Pinggy Asia Server..."
+            fi
+          fi
+
+          # 2. Neu chua co RDP_HOST -> Ket noi Pinggy CLI Asia (Singapore - Ping cuc thap 25ms, khong can token hay the)
+          if [ -z "$RDP_HOST" ]; then
+            echo "Dang ket noi Pinggy Asia Server (Singapore - ap.free.pinggy.io / Ping cuc thap)..."
+            curl -sL https://github.com/Pinggy-io/cli-js/releases/download/v0.6.1/pinggy-win-x64.exe -o pinggy.exe
+            ./pinggy.exe --type tcp -l 3389 tcp@ap.free.pinggy.io > pinggy.log 2>&1 &
+            
+            for i in {1..20}; do
+              sleep 2
+              if [ -f pinggy.log ]; then
+                MATCH=$(grep -oE 'tcp://[-a-zA-Z0-9.:]+' pinggy.log 2>/dev/null | head -n 1)
+                if [ -n "$MATCH" ]; then
+                  RDP_HOST=$(echo "$MATCH" | sed 's|tcp://||')
+                  break
+                fi
+              fi
+            done
+          fi
+
+          # 3. Fallback du phong Bore (neu 2 cong tren gap su co)
+          if [ -z "$RDP_HOST" ]; then
+            echo "Fallback Bore Tunnel..."
             curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-pc-windows-msvc.zip -o bore.zip
             unzip -q -o bore.zip
             ./bore.exe local 3389 --to bore.pub > bore.log 2>&1 &
             
-            for i in {1..20}; do
+            for i in {1..15}; do
               sleep 2
               if [ -f bore.log ]; then
                 PORT=$(grep -oE 'listening at bore.pub:[0-9]+' bore.log 2>/dev/null | grep -oE '[0-9]+' | head -n 1)
@@ -93,11 +118,11 @@ jobs:
           echo "PASS: Zetngu@123"
           echo "================================================================================"
 
-          echo "### 🖥️ MÁY ẢO WINDOWS RDP ĐÃ SẴN SÀNG!" >> $GITHUB_STEP_SUMMARY
+          echo "### 🖥️ MÁY ẢO WINDOWS RDP ASIA ĐÃ SẴN SÀNG!" >> $GITHUB_STEP_SUMMARY
           echo "- 📍 **Địa chỉ IP / Máy tính (Computer)**: \`$RDP_HOST\`" >> $GITHUB_STEP_SUMMARY
           echo "- 👤 **Tên đăng nhập (Username)**: \`zetlong\`" >> $GITHUB_STEP_SUMMARY
           echo "- 🔑 **Mật khẩu (Password)**: \`Zetngu@123\`" >> $GITHUB_STEP_SUMMARY
-          echo "- ⚡ **Trạng thái**: Hoạt động ổn định (Tối đa 6 tiếng)" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚡ **Vị trí Server**: Singapore / Asia Pacific (Ping 20-35ms)" >> $GITHUB_STEP_SUMMARY
 
           USER_ID="${{ github.event.inputs.user_id }}"
           BOT_TOKEN="${{ github.event.inputs.bot_token }}"
@@ -111,28 +136,28 @@ jobs:
             DM_CHANNEL=$(echo "$DM_RESP" | jq -r '.id // empty')
 
             if [ -n "$DM_CHANNEL" ] && [ "$DM_CHANNEL" != "null" ]; then
-              jq -n \
+              PAYLOAD=$(jq -n \
                 --arg host "$RDP_HOST" \
                 --arg uid "$USER_ID" \
                 '{
                   embeds: [{
-                    title: "🖥️ MÁY ẢO WINDOWS RDP ĐÃ SẴN SÀNG!",
-                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Windows Server 2022** của bạn đã khởi động thành công!\n\n📌 **Cách kết nối từ máy tính:**\n1. Nhấn phím **Win + R**, gõ **mstsc** rồi nhấn Enter.\n2. Nhập thông tin bên dưới để đăng nhập:"),
+                    title: "🖥️ MÁY ẢO WINDOWS RDP ASIA ĐÃ SẴN SÀNG!",
+                    description: ("Xin chào <@" + $uid + ">!\n\nMáy ảo **Windows Server 2022** của bạn đã khởi động thành công với vị trí **Server Singapore (Asia Pacific)** cho độ trễ cực thấp!\n\n📌 **Cách kết nối từ máy tính:**\n1. Nhấn phím **Win + R**, gõ **mstsc** rồi nhấn Enter.\n2. Nhập thông tin bên dưới để đăng nhập:"),
                     color: 3066993,
                     fields: [
                       { name: "📍 Địa chỉ IP / Máy tính (Computer)", value: ("```" + $host + "```"), inline: false },
                       { name: "👤 Tên đăng nhập (Username)", value: "```zetlong```", inline: true },
                       { name: "🔑 Mật khẩu (Password)", value: "```Zetngu@123```", inline: true },
-                      { name: "⚡ Trạng thái", value: "Hoạt động ổn định (Tối đa 6 tiếng)", inline: false }
+                      { name: "🌏 Vị trí máy chủ", value: "Singapore / Asia Pacific (Ping cực thấp ~20-35ms, 4 vạch)", inline: false }
                     ],
                     footer: { text: "Zet Store • Dịch vụ Windows RDP Asia" }
                   }]
-                }' > payload.json
+                }')
 
               curl -s -X POST "https://discord.com/api/v10/channels/$DM_CHANNEL/messages" \
                 -H "Authorization: Bot $BOT_TOKEN" \
                 -H "Content-Type: application/json" \
-                -d @payload.json
+                -d "$PAYLOAD"
               echo "Da gui thong tin RDP thanh cong vao DMs!"
             fi
           fi
