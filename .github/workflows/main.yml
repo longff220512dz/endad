@@ -153,24 +153,38 @@ jobs:
             $sunshineZip = "C:\sunshine.zip"
             $sunshineDir = "C:\Sunshine"
             Invoke-WebRequest -Uri "https://github.com/LizardByte/Sunshine/releases/download/v2026.914.233613/Sunshine-Windows-AMD64-lite.zip" -OutFile $sunshineZip -UseBasicParsing
-            Expand-Archive -Path $sunshineZip -DestinationPath $sunshineDir -Force
             
-            New-Item -ItemType Directory -Force -Path "$sunshineDir\config" | Out-Null
-            Set-Content -Path "$sunshineDir\config\sunshine.conf" -Value "port = 47989`norigin_pin_allowed = pc"
+            # Giai nen vao thu muc tam va chuyen sach ve C:\Sunshine (Tranh bi long thu muc C:\Sunshine\Sunshine)
+            Expand-Archive -Path $sunshineZip -DestinationPath "C:\sunshine_temp" -Force
+            New-Item -ItemType Directory -Force -Path $sunshineDir | Out-Null
+            Copy-Item -Path "C:\sunshine_temp\Sunshine\*" -Destination $sunshineDir -Recurse -Force
+            Remove-Item -Path "C:\sunshine_temp" -Recurse -Force -ErrorAction SilentlyContinue
 
+            # Tao config va copy san file apps.json de Sunshine khoi dong khong bao gio loi
+            New-Item -ItemType Directory -Force -Path "$sunshineDir\config" | Out-Null
+            if (Test-Path "$sunshineDir\assets\apps.json") {
+              Copy-Item "$sunshineDir\assets\apps.json" "$sunshineDir\config\apps.json" -Force
+            }
+            Set-Content -Path "$sunshineDir\config\sunshine.conf" -Value "port = 47989`norigin_pin_allowed = pc`nmin_log_level = info"
+
+            # Tao Shortcut tren Desktop co WorkingDirectory chuan xac
             $WshShell = New-Object -ComObject WScript.Shell
             $Shortcut = $WshShell.CreateShortcut("$publicDesktop\Sunshine (Moonlight Host).lnk")
             $Shortcut.TargetPath = "$sunshineDir\sunshine.exe"
+            $Shortcut.WorkingDirectory = "$sunshineDir"
             $Shortcut.Save()
             Copy-Item "$publicDesktop\Sunshine (Moonlight Host).lnk" "$userDesktop\Sunshine (Moonlight Host).lnk" -Force -ErrorAction SilentlyContinue
 
+            # Tao Shortcut Web UI nhap ma PIN
             $PinShortcut = $WshShell.CreateShortcut("$publicDesktop\Sunshine Pairing (PIN).lnk")
             $PinShortcut.TargetPath = "https://localhost:47990"
+            $PinShortcut.WorkingDirectory = "$sunshineDir"
             $PinShortcut.Save()
             Copy-Item "$publicDesktop\Sunshine Pairing (PIN).lnk" "$userDesktop\Sunshine Pairing (PIN).lnk" -Force -ErrorAction SilentlyContinue
 
-            Start-Process -FilePath "$sunshineDir\sunshine.exe" -WindowStyle Minimized -ErrorAction SilentlyContinue
-            Write-Host "Da khoi dong Sunshine Host cho Moonlight!"
+            # Khoi chay Sunshine trong dung WorkingDirectory
+            Start-Process -FilePath "$sunshineDir\sunshine.exe" -WorkingDirectory "$sunshineDir" -WindowStyle Minimized -ErrorAction SilentlyContinue
+            Write-Host "Da khoi dong Sunshine Host cho Moonlight thanh cong!"
           } catch {
             Write-Host "Loi cai dat Sunshine: $_"
           }
